@@ -4,7 +4,16 @@ import pytest
 from docx import Document
 
 from exporters.docx import render
-from models.schemas import ContactFields, EducationEntry, ExperienceEntry, ResumeBodyJSON
+from models.schemas import (
+    CertificationEntry,
+    ContactFields,
+    EducationEntry,
+    ExperienceEntry,
+    ProjectEntry,
+    ResumeBodyJSON,
+    SkillGroup,
+)
+from templates.library import DEFAULT_TEMPLATE, TEMPLATES, Template, Section
 
 
 def _make_resume(**overrides) -> ResumeBodyJSON:
@@ -21,7 +30,10 @@ def _make_resume(**overrides) -> ResumeBodyJSON:
                 bullets=["Led migration to Kubernetes.", "Reduced costs by 20%."],
             )
         ],
-        skills=["Python", "Kubernetes", "AWS"],
+        skills=[
+            SkillGroup(category="Languages", skills=["Python", "SQL"]),
+            SkillGroup(category="Cloud", skills=["Kubernetes", "AWS"]),
+        ],
         education=[
             EducationEntry(
                 degree="B.S. Computer Science",
@@ -126,3 +138,156 @@ def test_rationale_absent_from_docx():
     resume = _make_resume(rationale="This rationale should never appear in the DOCX output.")
     doc = Document(io.BytesIO(render(resume, _make_contact())))
     assert "This rationale should never appear in the DOCX output." not in _full_text(doc)
+
+
+# ---------------------------------------------------------------------------
+# Grouped skills rendering
+# ---------------------------------------------------------------------------
+
+def test_skills_rendered_with_category_labels():
+    doc = Document(io.BytesIO(render(_make_resume(), _make_contact())))
+    text = _full_text(doc)
+    assert "Languages:" in text
+    assert "Cloud:" in text
+
+
+def test_skills_rendered_as_pipe_separated_groups():
+    doc = Document(io.BytesIO(render(_make_resume(), _make_contact())))
+    text = _full_text(doc)
+    assert "Languages: Python, SQL | Cloud: Kubernetes, AWS" in text
+
+
+def test_max_skill_groups_cap_respected():
+    many_groups = [
+        SkillGroup(category=f"Cat{i}", skills=[f"skill{i}"])
+        for i in range(10)
+    ]
+    resume = _make_resume(skills=many_groups)
+    # standard template has max_skill_groups=5
+    doc = Document(io.BytesIO(render(resume, _make_contact(), TEMPLATES["standard"])))
+    text = _full_text(doc)
+    assert "Cat4:" in text   # 5th group (index 4) present
+    assert "Cat5:" not in text  # 6th group absent
+
+
+# ---------------------------------------------------------------------------
+# Certifications renderer
+# ---------------------------------------------------------------------------
+
+_CERTS_TEMPLATE = Template(
+    id="certs_test",
+    name="Certs Test",
+    description="Test template including certifications.",
+    sections=[Section.SUMMARY, Section.CERTIFICATIONS, Section.EDUCATION],
+)
+
+
+def test_certifications_rendered_when_present():
+    resume = _make_resume(
+        certifications=[CertificationEntry(name="AWS SAA", issuer="Amazon", date="Jun 2023")]
+    )
+    doc = Document(io.BytesIO(render(resume, _make_contact(), _CERTS_TEMPLATE)))
+    text = _full_text(doc)
+    assert "AWS SAA" in text
+    assert "Amazon" in text
+    assert "Jun 2023" in text
+
+
+def test_certification_no_date_renders_without_pipe():
+    resume = _make_resume(
+        certifications=[CertificationEntry(name="CKA", issuer="CNCF")]
+    )
+    doc = Document(io.BytesIO(render(resume, _make_contact(), _CERTS_TEMPLATE)))
+    text = _full_text(doc)
+    assert "CKA" in text
+    assert "CNCF" in text
+
+
+# ---------------------------------------------------------------------------
+# Projects renderer
+# ---------------------------------------------------------------------------
+
+def test_projects_rendered_when_present():
+    resume = _make_resume(
+        projects=[
+            ProjectEntry(
+                name="DataPipeline",
+                description="An ETL pipeline for analytics.",
+                technologies=["Python", "Airflow"],
+                bullets=["Processed 1M rows daily.", "Reduced runtime by 40%."],
+            )
+        ]
+    )
+    technical = TEMPLATES["technical"]
+    doc = Document(io.BytesIO(render(resume, _make_contact(), technical)))
+    text = _full_text(doc)
+    assert "DataPipeline" in text
+    assert "Processed 1M rows daily." in text
+
+
+# ---------------------------------------------------------------------------
+# None sections silently skipped
+# ---------------------------------------------------------------------------
+
+def test_none_certifications_silently_skipped():
+    resume = _make_resume(certifications=None)
+    technical = TEMPLATES["technical"]
+    doc = Document(io.BytesIO(render(resume, _make_contact(), technical)))
+    text = _full_text(doc)
+    assert "CERTIFICATIONS" not in text.upper()
+
+
+def test_none_projects_silently_skipped():
+    resume = _make_resume(projects=None)
+    technical = TEMPLATES["technical"]
+    doc = Document(io.BytesIO(render(resume, _make_contact(), technical)))
+    text = _full_text(doc)
+    assert "PROJECTS" not in text.upper()
+
+
+# ---------------------------------------------------------------------------
+# Template section order
+# ---------------------------------------------------------------------------
+
+def test_template_section_order_respected():
+    """Technical template puts Skills before Experience."""
+    resume = _make_resume()
+    doc = Document(io.BytesIO(render(resume, _make_contact(), TEMPLATES["technical"])))
+    # Use exact equality to match only section header paragraphs (not content that
+    # happens to contain these words when uppercased).
+    texts = [p.text.upper() for p in doc.paragraphs]
+    skills_idx = next(i for i, t in enumerate(texts) if t == "SKILLS")
+    exp_idx = next(i for i, t in enumerate(texts) if t == "EXPERIENCE")
+    assert skills_idx < exp_idx
+
+
+def test_standard_template_omits_projects():
+    resume = _make_resume(
+        projects=[
+            ProjectEntry(
+                name="SideProject",
+                description="A cool side project.",
+                technologies=["Go"],
+                bullets=["Shipped it."],
+            )
+        ]
+    )
+    doc = Document(io.BytesIO(render(resume, _make_contact(), TEMPLATES["standard"])))
+    text = _full_text(doc)
+    assert "SideProject" not in text
+
+
+def test_technical_template_includes_projects():
+    resume = _make_resume(
+        projects=[
+            ProjectEntry(
+                name="SideProject",
+                description="A cool side project.",
+                technologies=["Go"],
+                bullets=["Shipped it."],
+            )
+        ]
+    )
+    doc = Document(io.BytesIO(render(resume, _make_contact(), TEMPLATES["technical"])))
+    text = _full_text(doc)
+    assert "SideProject" in text

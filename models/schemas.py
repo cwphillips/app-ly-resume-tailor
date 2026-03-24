@@ -5,19 +5,46 @@ from pydantic import BaseModel, Field
 from anthropic.types import ToolParam
 
 
+class SkillGroup(BaseModel):
+    category: str = Field(
+        description="Category label, e.g. 'Languages', 'Tools', 'Frameworks', 'Platforms'."
+    )
+    skills: list[str] = Field(min_length=1)
+
+
 class ExperienceEntry(BaseModel):
     title: str
     company: str
-    location: str
-    start_date: str
-    end_date: str
+    location: Optional[str] = None
+    start_date: str = Field(description="'MMM YYYY' format (e.g. 'Jan 2022'). Use 'Present' for current roles.")
+    end_date: str = Field(description="'MMM YYYY' format (e.g. 'Jan 2022'). Use 'Present' for current roles.")
     bullets: list[str] = Field(min_length=1)
 
 
 class EducationEntry(BaseModel):
     degree: str
     institution: str
-    graduation_date: str
+    graduation_date: str = Field(description="'MMM YYYY' format (e.g. 'May 2019').")
+
+
+class CertificationEntry(BaseModel):
+    name: str
+    issuer: str
+    date: Optional[str] = Field(
+        default=None,
+        description="'MMM YYYY' format (e.g. 'Jun 2023'), or null if unknown.",
+    )
+
+
+class ProjectEntry(BaseModel):
+    name: str
+    description: str = Field(description="One sentence describing the project and its purpose.")
+    technologies: list[str] = Field(description="Technologies, languages, and tools used.")
+    bullets: list[str] = Field(
+        min_length=1,
+        description="Achievement-focused bullets. Use action verbs, past tense.",
+    )
+    url: Optional[str] = Field(default=None, description="Project URL or repo link, if public.")
 
 
 class ResumeBodyJSON(BaseModel):
@@ -32,11 +59,20 @@ class ResumeBodyJSON(BaseModel):
     experience: list[ExperienceEntry] = Field(
         description="Work experience entries in reverse-chronological order."
     )
-    skills: list[str] = Field(
-        description="A flat list of skills relevant to the target role.",
+    skills: list[SkillGroup] = Field(
+        description="Skills grouped by category, relevant to the target role.",
         min_length=1,
     )
     education: list[EducationEntry]
+    certifications: Optional[list[CertificationEntry]] = None
+    projects: Optional[list[ProjectEntry]] = None
+    skipped_sections: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Names of optional sections omitted because source material lacked content. "
+            "Use the section's enum value: 'certifications' or 'projects'."
+        ),
+    )
 
 
 class ReviewJSON(BaseModel):

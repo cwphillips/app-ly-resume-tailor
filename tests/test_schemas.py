@@ -2,11 +2,14 @@ import pytest
 from pydantic import ValidationError
 
 from models.schemas import (
+    CertificationEntry,
     ContactFields,
     EducationEntry,
     ExperienceEntry,
+    ProjectEntry,
     ReviewJSON,
     ResumeBodyJSON,
+    SkillGroup,
     TAILORING_TOOL,
     REVIEW_TOOL,
 )
@@ -30,7 +33,7 @@ def _valid_resume() -> dict:
                 "bullets": ["Built distributed systems.", "Reduced latency by 30%."],
             }
         ],
-        "skills": ["Python", "AWS"],
+        "skills": [{"category": "Languages", "skills": ["Python", "SQL"]}],
         "education": [
             {
                 "degree": "B.S. Computer Science",
@@ -72,6 +75,93 @@ def test_resume_body_empty_bullets_rejected():
 def test_resume_body_has_rationale():
     resume = ResumeBodyJSON(**_valid_resume())
     assert resume.rationale
+
+
+# ---------------------------------------------------------------------------
+# SkillGroup
+# ---------------------------------------------------------------------------
+
+def test_skill_group_valid():
+    group = SkillGroup(category="Languages", skills=["Python", "SQL"])
+    assert group.category == "Languages"
+    assert group.skills == ["Python", "SQL"]
+
+
+def test_skill_group_empty_skills_rejected():
+    with pytest.raises(ValidationError):
+        SkillGroup(category="Languages", skills=[])
+
+
+# ---------------------------------------------------------------------------
+# CertificationEntry
+# ---------------------------------------------------------------------------
+
+def test_certification_entry_with_date():
+    cert = CertificationEntry(name="AWS SAA", issuer="Amazon", date="Jun 2023")
+    assert cert.date == "Jun 2023"
+
+
+def test_certification_entry_optional_date():
+    cert = CertificationEntry(name="AWS SAA", issuer="Amazon")
+    assert cert.date is None
+
+
+# ---------------------------------------------------------------------------
+# ProjectEntry
+# ---------------------------------------------------------------------------
+
+def test_project_entry_valid():
+    proj = ProjectEntry(
+        name="My Project",
+        description="A tool for doing things.",
+        technologies=["Python", "Docker"],
+        bullets=["Built the thing.", "Reduced cost by 15%."],
+    )
+    assert proj.name == "My Project"
+    assert proj.url is None
+
+
+def test_project_entry_empty_bullets_rejected():
+    with pytest.raises(ValidationError):
+        ProjectEntry(
+            name="My Project",
+            description="A tool.",
+            technologies=["Python"],
+            bullets=[],
+        )
+
+
+# ---------------------------------------------------------------------------
+# ResumeBodyJSON optional sections and skipped_sections
+# ---------------------------------------------------------------------------
+
+def test_skipped_sections_defaults_to_empty_list():
+    resume = ResumeBodyJSON(**_valid_resume())
+    assert resume.skipped_sections == []
+
+
+def test_skipped_sections_populated():
+    data = _valid_resume()
+    data["skipped_sections"] = ["certifications", "projects"]
+    resume = ResumeBodyJSON(**data)
+    assert resume.skipped_sections == ["certifications", "projects"]
+
+
+def test_certifications_default_none():
+    resume = ResumeBodyJSON(**_valid_resume())
+    assert resume.certifications is None
+
+
+def test_projects_default_none():
+    resume = ResumeBodyJSON(**_valid_resume())
+    assert resume.projects is None
+
+
+def test_experience_location_optional():
+    data = _valid_resume()
+    data["experience"][0].pop("location")
+    resume = ResumeBodyJSON(**data)
+    assert resume.experience[0].location is None
 
 
 # ---------------------------------------------------------------------------

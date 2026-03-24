@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import io
-from typing import Optional
+from typing import Callable
 
 from docx import Document
 from docx.shared import Pt, Inches, RGBColor
@@ -10,6 +10,7 @@ from docx.oxml import OxmlElement
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 from models.schemas import ResumeBodyJSON, ContactFields
+from templates.library import Section, Template, DEFAULT_TEMPLATE
 
 
 def _set_font(run, name: str = "Calibri", size_pt: float = 11, bold: bool = False) -> None:
@@ -63,37 +64,16 @@ def _add_contact_line(doc: Document, contact: ContactFields) -> None:
     _set_font(contact_run, size_pt=10)
 
 
-def render(resume: ResumeBodyJSON, contact: ContactFields) -> bytes:
-    """Render a ResumeBodyJSON + ContactFields into DOCX bytes.
-
-    ContactFields are injected here only — they must never appear in LLM prompts.
-    """
-    doc = Document()
-
-    # Page margins (narrow for more content space)
-    for section in doc.sections:
-        section.top_margin = Inches(0.75)
-        section.bottom_margin = Inches(0.75)
-        section.left_margin = Inches(0.85)
-        section.right_margin = Inches(0.85)
-
-    # Default paragraph spacing
-    doc.styles["Normal"].paragraph_format.space_after = Pt(2)
-    doc.styles["Normal"].paragraph_format.space_before = Pt(0)
-
-    # --- Contact block (PII injected here) ---
-    _add_contact_line(doc, contact)
-
-    # --- Summary ---
+def _render_summary(doc: Document, resume: ResumeBodyJSON, template: Template) -> None:
     _add_section_header(doc, "Summary")
     summary_para = doc.add_paragraph()
     summary_para.paragraph_format.space_after = Pt(4)
     _set_font(summary_para.add_run(resume.summary), size_pt=11)
 
-    # --- Experience ---
+
+def _render_experience(doc: Document, resume: ResumeBodyJSON, template: Template) -> None:
     _add_section_header(doc, "Experience")
     for entry in resume.experience:
-        # Title | Company | Location                        Start – End
         header_para = doc.add_paragraph()
         header_para.paragraph_format.space_before = Pt(4)
         header_para.paragraph_format.space_after = Pt(0)
@@ -115,13 +95,21 @@ def render(resume: ResumeBodyJSON, contact: ContactFields) -> bytes:
             bullet_para.paragraph_format.space_after = Pt(1)
             _set_font(bullet_para.add_run(bullet), size_pt=11)
 
-    # --- Skills ---
+
+def _render_skills(doc: Document, resume: ResumeBodyJSON, template: Template) -> None:
+    groups = resume.skills
+    if template.max_skill_groups is not None:
+        groups = groups[: template.max_skill_groups]
+    skills_line = " | ".join(
+        f"{g.category}: {', '.join(g.skills)}" for g in groups
+    )
     _add_section_header(doc, "Skills")
     skills_para = doc.add_paragraph()
     skills_para.paragraph_format.space_after = Pt(4)
-    _set_font(skills_para.add_run(", ".join(resume.skills)), size_pt=11)
+    _set_font(skills_para.add_run(skills_line), size_pt=11)
 
-    # --- Education ---
+
+def _render_education(doc: Document, resume: ResumeBodyJSON, template: Template) -> None:
     _add_section_header(doc, "Education")
     for entry in resume.education:
         edu_para = doc.add_paragraph()
@@ -131,6 +119,94 @@ def render(resume: ResumeBodyJSON, contact: ContactFields) -> bytes:
         _set_font(degree_run, bold=True, size_pt=11)
         inst_run = edu_para.add_run(f"  —  {entry.institution}  |  {entry.graduation_date}")
         _set_font(inst_run, size_pt=10)
+
+
+def _render_certifications(doc: Document, resume: ResumeBodyJSON, template: Template) -> None:
+    if not resume.certifications:
+        return
+    _add_section_header(doc, "Certifications")
+    for entry in resume.certifications:
+        cert_para = doc.add_paragraph()
+        cert_para.paragraph_format.space_before = Pt(3)
+        cert_para.paragraph_format.space_after = Pt(1)
+        name_run = cert_para.add_run(entry.name)
+        _set_font(name_run, bold=True, size_pt=11)
+        issuer_text = f"  —  {entry.issuer}"
+        if entry.date:
+            issuer_text += f"  |  {entry.date}"
+        issuer_run = cert_para.add_run(issuer_text)
+        _set_font(issuer_run, size_pt=10)
+
+
+def _render_projects(doc: Document, resume: ResumeBodyJSON, template: Template) -> None:
+    if not resume.projects:
+        return
+    _add_section_header(doc, "Projects")
+    for entry in resume.projects:
+        header_para = doc.add_paragraph()
+        header_para.paragraph_format.space_before = Pt(4)
+        header_para.paragraph_format.space_after = Pt(0)
+        name_run = header_para.add_run(entry.name)
+        _set_font(name_run, bold=True, size_pt=11)
+
+        desc_para = doc.add_paragraph()
+        desc_para.paragraph_format.space_after = Pt(1)
+        _set_font(desc_para.add_run(entry.description), size_pt=11)
+
+        tech_para = doc.add_paragraph()
+        tech_para.paragraph_format.space_after = Pt(1)
+        tech_run = tech_para.add_run(f"Technologies: {', '.join(entry.technologies)}")
+        _set_font(tech_run, size_pt=10)
+        tech_run.font.color.rgb = RGBColor(0x60, 0x60, 0x60)
+
+        for bullet in entry.bullets:
+            bullet_para = doc.add_paragraph(style="List Bullet")
+            bullet_para.paragraph_format.left_indent = Inches(0.25)
+            bullet_para.paragraph_format.space_after = Pt(1)
+            _set_font(bullet_para.add_run(bullet), size_pt=11)
+
+
+_SECTION_RENDERERS: dict[Section, Callable[[Document, ResumeBodyJSON, Template], None]] = {
+    Section.SUMMARY: _render_summary,
+    Section.EXPERIENCE: _render_experience,
+    Section.SKILLS: _render_skills,
+    Section.EDUCATION: _render_education,
+    Section.CERTIFICATIONS: _render_certifications,
+    Section.PROJECTS: _render_projects,
+}
+
+
+def render(
+    resume: ResumeBodyJSON,
+    contact: ContactFields,
+    template: Template = DEFAULT_TEMPLATE,
+) -> bytes:
+    """Render a ResumeBodyJSON + ContactFields into DOCX bytes.
+
+    ContactFields are injected here only — they must never appear in LLM prompts.
+    The template controls section order and skill group cap.
+    """
+    doc = Document()
+
+    # Page margins (narrow for more content space)
+    for section in doc.sections:
+        section.top_margin = Inches(0.75)
+        section.bottom_margin = Inches(0.75)
+        section.left_margin = Inches(0.85)
+        section.right_margin = Inches(0.85)
+
+    # Default paragraph spacing
+    doc.styles["Normal"].paragraph_format.space_after = Pt(2)
+    doc.styles["Normal"].paragraph_format.space_before = Pt(0)
+
+    # --- Contact block (PII injected here) ---
+    _add_contact_line(doc, contact)
+
+    # --- Sections in template order ---
+    for section in template.sections:
+        renderer = _SECTION_RENDERERS.get(section)
+        if renderer is not None:
+            renderer(doc, resume, template)
 
     buf = io.BytesIO()
     doc.save(buf)

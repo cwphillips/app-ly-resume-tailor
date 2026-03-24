@@ -11,7 +11,7 @@ import textwrap
 
 import pytest
 
-from models.schemas import ContactFields, ExperienceEntry, EducationEntry, ResumeBodyJSON, ReviewJSON
+from models.schemas import ContactFields, ExperienceEntry, EducationEntry, ResumeBodyJSON, ReviewJSON, SkillGroup
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +44,7 @@ def _make_resume() -> ResumeBodyJSON:
                 bullets=["Did things."],
             )
         ],
-        skills=["Python"],
+        skills=[SkillGroup(category="Languages", skills=["Python"])],
         education=[EducationEntry(degree="B.S.", institution="University", graduation_date="2019")],
     )
 

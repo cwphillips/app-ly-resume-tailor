@@ -17,6 +17,7 @@ import exporters.converter as converter
 from agents.tailoring import TailoringResult
 from agents.review import ReviewResult
 from models.schemas import ContactFields, ResumeBodyJSON, ReviewJSON
+from templates.library import TEMPLATES, DEFAULT_TEMPLATE, Template
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -39,6 +40,7 @@ defaults: dict = {
     "docx_bytes": None,
     "libreoffice_available": None,
     "running": False,
+    "selected_template_id": DEFAULT_TEMPLATE.id,
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -101,26 +103,56 @@ def _run_pipeline(
     return tailor_result.resume, review_result.review
 
 
-def _render_resume_preview(resume: ResumeBodyJSON) -> None:
+def _render_resume_preview(resume: ResumeBodyJSON, template: Template) -> None:
+    from templates.library import Section
+
     st.subheader("Resume Preview")
 
-    st.markdown(f"**Summary**\n\n{resume.summary}")
+    for section in template.sections:
+        if section == Section.SUMMARY:
+            st.markdown(f"**Summary**\n\n{resume.summary}")
 
-    st.markdown("**Experience**")
-    for exp in resume.experience:
-        st.markdown(
-            f"**{exp.title}** — {exp.company}"
-            + (f" | {exp.location}" if exp.location else "")
-            + f"\n\n_{exp.start_date} – {exp.end_date}_"
-        )
-        for bullet in exp.bullets:
-            st.markdown(f"- {bullet}")
+        elif section == Section.EXPERIENCE:
+            st.markdown("**Experience**")
+            for exp in resume.experience:
+                st.markdown(
+                    f"**{exp.title}** — {exp.company}"
+                    + (f" | {exp.location}" if exp.location else "")
+                    + f"\n\n_{exp.start_date} – {exp.end_date}_"
+                )
+                for bullet in exp.bullets:
+                    st.markdown(f"- {bullet}")
 
-    st.markdown(f"**Skills**\n\n{', '.join(resume.skills)}")
+        elif section == Section.SKILLS:
+            groups = resume.skills
+            if template.max_skill_groups is not None:
+                groups = groups[: template.max_skill_groups]
+            skills_line = " | ".join(
+                f"{g.category}: {', '.join(g.skills)}" for g in groups
+            )
+            st.markdown(f"**Skills**\n\n{skills_line}")
 
-    st.markdown("**Education**")
-    for edu in resume.education:
-        st.markdown(f"**{edu.degree}** — {edu.institution} | {edu.graduation_date}")
+        elif section == Section.EDUCATION:
+            st.markdown("**Education**")
+            for edu in resume.education:
+                st.markdown(f"**{edu.degree}** — {edu.institution} | {edu.graduation_date}")
+
+        elif section == Section.CERTIFICATIONS and resume.certifications:
+            st.markdown("**Certifications**")
+            for cert in resume.certifications:
+                line = f"**{cert.name}** — {cert.issuer}"
+                if cert.date:
+                    line += f" | {cert.date}"
+                st.markdown(line)
+
+        elif section == Section.PROJECTS and resume.projects:
+            st.markdown("**Projects**")
+            for proj in resume.projects:
+                st.markdown(f"**{proj.name}**")
+                st.markdown(proj.description)
+                st.caption(f"Technologies: {', '.join(proj.technologies)}")
+                for bullet in proj.bullets:
+                    st.markdown(f"- {bullet}")
 
     with st.expander("Why this resume? (tailoring rationale)"):
         st.write(resume.rationale)
@@ -152,10 +184,10 @@ def _render_review_panel(review: ReviewJSON, previous_score: Optional[int] = Non
             st.markdown(f"{i}. {sug}")
 
 
-def _render_export_buttons(contact: ContactFields) -> None:
+def _render_export_buttons(contact: ContactFields, template: Template) -> None:
     st.subheader("Export")
 
-    docx_bytes = docx_exporter.render(st.session_state.resume_body, contact)
+    docx_bytes = docx_exporter.render(st.session_state.resume_body, contact, template)
     st.session_state.docx_bytes = docx_bytes
 
     st.download_button(
@@ -294,6 +326,7 @@ if st.button(generate_label, type="primary", disabled=generate_disabled, use_con
     st.session_state.previous_score = None
     st.session_state.refinement_count = 0
     st.session_state.docx_bytes = None
+    st.session_state.selected_template_id = DEFAULT_TEMPLATE.id
 
     try:
         with st.status("Running pipeline...", expanded=True) as status:
@@ -380,10 +413,35 @@ if st.session_state.refinement_count >= MAX_REFINEMENTS:
 if st.session_state.resume_body is not None:
     st.divider()
 
+    # Skipped sections callout
+    skipped = st.session_state.resume_body.skipped_sections
+    if skipped:
+        skipped_names = ", ".join(s.capitalize() for s in skipped)
+        st.info(
+            f"These sections were not included because your source material didn't contain "
+            f"enough information: **{skipped_names}**. "
+            "Add that content to your resume text and regenerate to include them."
+        )
+
+    # Template selector
+    template_names = [t.name for t in TEMPLATES.values()]
+    template_ids = list(TEMPLATES.keys())
+    current_index = template_ids.index(st.session_state.selected_template_id)
+    selected_name = st.radio(
+        "Template",
+        template_names,
+        index=current_index,
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+    selected_template_id = template_ids[template_names.index(selected_name)]
+    st.session_state.selected_template_id = selected_template_id
+    selected_template = TEMPLATES[selected_template_id]
+
     res_col, rev_col = st.columns([3, 2])
 
     with res_col:
-        _render_resume_preview(st.session_state.resume_body)
+        _render_resume_preview(st.session_state.resume_body, selected_template)
 
     with rev_col:
         if st.session_state.review is not None:
@@ -402,4 +460,4 @@ if st.session_state.resume_body is not None:
         linkedin=contact_linkedin or None,
         github=contact_github or None,
     )
-    _render_export_buttons(contact)
+    _render_export_buttons(contact, selected_template)
