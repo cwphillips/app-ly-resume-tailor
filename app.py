@@ -5,12 +5,17 @@ from typing import Optional
 
 import anthropic
 import streamlit as st
+from dotenv import load_dotenv
+
+load_dotenv()
 
 import agents.tailoring as tailoring_agent
 import agents.review as review_agent
 import exporters.docx as docx_exporter
 import exporters.converter as converter
 
+from agents.tailoring import TailoringResult
+from agents.review import ReviewResult
 from models.schemas import ContactFields, ResumeBodyJSON, ReviewJSON
 
 # ---------------------------------------------------------------------------
@@ -59,10 +64,14 @@ def _run_pipeline(
     job_listing: str,
     target_role: str,
     page_limit: Optional[int],
+    status,  # st.status container
     previous_resume: Optional[ResumeBodyJSON] = None,
     review_feedback: Optional[ReviewJSON] = None,
 ) -> tuple[ResumeBodyJSON, ReviewJSON]:
-    resume = tailoring_agent.run(
+    label = "Refinement pass" if previous_resume is not None else "Tailoring resume"
+
+    status.write(f"**Step 1 of 2 — {label}** (model: `claude-sonnet-4-6`)")
+    tailor_result: TailoringResult = tailoring_agent.run(
         resume_text=resume_text,
         job_listing=job_listing,
         target_role=target_role,
@@ -71,14 +80,25 @@ def _run_pipeline(
         review_feedback=review_feedback,
         api_key=api_key,
     )
-    review = review_agent.run(
-        resume=resume,
+    status.write(
+        f"  Done — {tailor_result.input_tokens:,} tokens in, "
+        f"{tailor_result.output_tokens:,} tokens out."
+    )
+
+    status.write("**Step 2 of 2 — Reviewing resume** (model: `claude-sonnet-4-6`)")
+    review_result: ReviewResult = review_agent.run(
+        resume=tailor_result.resume,
         job_listing=job_listing,
         target_role=target_role,
         page_limit=page_limit,
         api_key=api_key,
     )
-    return resume, review
+    status.write(
+        f"  Done — {review_result.input_tokens:,} tokens in, "
+        f"{review_result.output_tokens:,} tokens out."
+    )
+
+    return tailor_result.resume, review_result.review
 
 
 def _render_resume_preview(resume: ResumeBodyJSON) -> None:
@@ -248,14 +268,22 @@ with col_right:
 # ---------------------------------------------------------------------------
 api_key = _resolve_api_key(api_key_input)
 
-generate_disabled = (
-    st.session_state.running
-    or not resume_text.strip()
-    or not job_listing.strip()
-    or not api_key
-    or not contact_name.strip()
-    or not contact_email.strip()
-)
+missing: list[str] = []
+if not api_key:
+    missing.append("Anthropic API key (sidebar → Settings)")
+if not contact_name.strip():
+    missing.append("Full Name (sidebar → Contact Information)")
+if not contact_email.strip():
+    missing.append("Email (sidebar → Contact Information)")
+if not resume_text.strip():
+    missing.append("Your Resume / Skills")
+if not job_listing.strip():
+    missing.append("Job Listing")
+
+generate_disabled = bool(missing) or st.session_state.running
+
+if missing and not st.session_state.running:
+    st.warning("To generate, please fill in: " + ", ".join(missing) + ".")
 
 generate_label = "Generating..." if st.session_state.running else "Generate Tailored Resume"
 
@@ -268,14 +296,16 @@ if st.button(generate_label, type="primary", disabled=generate_disabled, use_con
     st.session_state.docx_bytes = None
 
     try:
-        with st.spinner("Tailoring resume..."):
+        with st.status("Running pipeline...", expanded=True) as status:
             resume, review = _run_pipeline(
                 api_key=api_key,
                 resume_text=resume_text,
                 job_listing=job_listing,
                 target_role=target_role,
                 page_limit=page_limit,
+                status=status,
             )
+            status.update(label="Pipeline complete.", state="complete", expanded=False)
         st.session_state.resume_body = resume
         st.session_state.review = review
     except anthropic.AuthenticationError:
@@ -309,9 +339,10 @@ if (
         prev_score = st.session_state.review.score if st.session_state.review else None
 
         try:
-            with st.spinner(
-                f"Running refinement {st.session_state.refinement_count + 1} of {MAX_REFINEMENTS}..."
-            ):
+            with st.status(
+                f"Running refinement {st.session_state.refinement_count + 1} of {MAX_REFINEMENTS}...",
+                expanded=True,
+            ) as status:
                 resume, review = _run_pipeline(
                     api_key=api_key,
                     resume_text=resume_text,
@@ -320,7 +351,9 @@ if (
                     page_limit=page_limit,
                     previous_resume=st.session_state.resume_body,
                     review_feedback=st.session_state.review,
+                    status=status,
                 )
+                status.update(label="Refinement complete.", state="complete", expanded=False)
             st.session_state.previous_score = prev_score
             st.session_state.resume_body = resume
             st.session_state.review = review

@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import anthropic
 
 from models.schemas import ResumeBodyJSON, ReviewJSON, REVIEW_TOOL
+
+
+@dataclass
+class ReviewResult:
+    review: ReviewJSON
+    input_tokens: int
+    output_tokens: int
 
 MODEL = "claude-sonnet-4-6"
 
@@ -41,8 +50,8 @@ def run(
     target_role: str = "",
     page_limit: int | None = None,
     api_key: str,
-) -> ReviewJSON:
-    """Call the ReviewAgent and return a validated ReviewJSON."""
+) -> ReviewResult:
+    """Call the ReviewAgent and return a ReviewResult with the review and token usage."""
     client = anthropic.Anthropic(api_key=api_key)
 
     parts: list[str] = [
@@ -76,4 +85,8 @@ def run(
             f"Stop reason: {response.stop_reason}. "
             "This is unexpected — try again or check your API key and quota."
         )
-    return ReviewJSON(**tool_use_block.input)
+    return ReviewResult(
+        review=ReviewJSON(**tool_use_block.input),
+        input_tokens=response.usage.input_tokens,
+        output_tokens=response.usage.output_tokens,
+    )
