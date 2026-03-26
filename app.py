@@ -477,7 +477,11 @@ if st.button(generate_label, type="primary", disabled=generate_disabled, use_con
                 max_skill_groups=TEMPLATES[DEFAULT_TEMPLATE.id].max_skill_groups,
                 status=status,
             )
-            status.update(label="Pipeline complete.", state="complete", expanded=False)
+            status.update(
+                label=f"Pipeline complete — estimated cost: {_estimate_cost(in_tok, out_tok)}",
+                state="complete",
+                expanded=False,
+            )
         st.session_state.resume_body = resume
         st.session_state.review = review
         st.session_state.total_input_tokens = in_tok
@@ -534,14 +538,20 @@ if (
                     review_feedback=st.session_state.review,
                     status=status,
                 )
-                status.update(label="Refinement complete.", state="complete", expanded=False)
+            cumulative_in = st.session_state.total_input_tokens + in_tok
+            cumulative_out = st.session_state.total_output_tokens + out_tok
+            status.update(
+                label=f"Refinement complete — total estimated cost: {_estimate_cost(cumulative_in, cumulative_out)}",
+                state="complete",
+                expanded=False,
+            )
             st.session_state.previous_score = prev_score
             st.session_state.resume_body = resume
             st.session_state.review = review
             st.session_state.refinement_count += 1
             st.session_state.docx_bytes = None
-            st.session_state.total_input_tokens += in_tok
-            st.session_state.total_output_tokens += out_tok
+            st.session_state.total_input_tokens = cumulative_in
+            st.session_state.total_output_tokens = cumulative_out
         except anthropic.AuthenticationError:
             st.error("Invalid API key. Check your key and try again.")
         except anthropic.RateLimitError:
@@ -644,12 +654,3 @@ if st.session_state.resume_body is not None:
         github=contact_github or None,
     )
     _render_export_buttons(contact, selected_template)
-
-    total_in = st.session_state.total_input_tokens
-    total_out = st.session_state.total_output_tokens
-    if total_in or total_out:
-        st.caption(
-            f"Estimated cost: {_estimate_cost(total_in, total_out)}",
-            help="Based on Claude Sonnet 4.6 list pricing ($3/M input, $15/M output). "
-                 "Cumulative across all generation and refinement passes.",
-        )
