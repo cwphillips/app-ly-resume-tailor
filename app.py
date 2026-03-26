@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import difflib
+import json
 import os
 from typing import Optional
 
@@ -41,6 +43,19 @@ defaults: dict = {
     "libreoffice_available": None,
     "running": False,
     "selected_template_id": DEFAULT_TEMPLATE.id,
+    "previous_resume_md": None,
+    "total_input_tokens": 0,
+    "total_output_tokens": 0,
+    # Stable keys for saveable input widgets
+    "ss_resume_text": "",
+    "ss_job_listing": "",
+    "ss_target_role": "",
+    "ss_name": "",
+    "ss_email": "",
+    "ss_phone": "",
+    "ss_location": "",
+    "ss_linkedin": "",
+    "ss_github": "",
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -55,8 +70,67 @@ if st.session_state.libreoffice_available is None:
 # Helpers
 # ---------------------------------------------------------------------------
 
+_INPUT_COST_PER_M = 3.0   # USD per million input tokens (Claude Sonnet 4.6)
+_OUTPUT_COST_PER_M = 15.0  # USD per million output tokens
+
+
 def _resolve_api_key(ui_key: str) -> str:
     return ui_key.strip() or os.environ.get("ANTHROPIC_API_KEY", "")
+
+
+def _estimate_cost(input_tokens: int, output_tokens: int) -> str:
+    cost = (input_tokens * _INPUT_COST_PER_M + output_tokens * _OUTPUT_COST_PER_M) / 1_000_000
+    return f"~${cost:.3f}"
+
+
+def _resume_to_markdown(resume: ResumeBodyJSON, template: Template) -> str:
+    """Return a plain-text markdown representation of the resume for diffing."""
+    from templates.library import Section
+    lines: list[str] = []
+    for section in template.sections:
+        if section == Section.SUMMARY and resume.summary:
+            lines += ["**Summary**", resume.summary, ""]
+        elif section == Section.EXPERIENCE:
+            lines.append("**Experience**")
+            for exp in resume.experience:
+                lines.append(
+                    f"**{exp.title}** — {exp.company}"
+                    + (f" | {exp.location}" if exp.location else "")
+                    + f" | {exp.start_date} – {exp.end_date}"
+                )
+                lines += [f"- {b}" for b in exp.bullets]
+                lines.append("")
+        elif section == Section.SKILLS:
+            groups = resume.skills
+            if template.max_skill_groups is not None:
+                groups = groups[: template.max_skill_groups]
+            lines.append("**Skills**")
+            lines += [f"{g.category}: {', '.join(g.skills)}" for g in groups]
+            lines.append("")
+        elif section == Section.EDUCATION:
+            lines.append("**Education**")
+            lines += [
+                f"**{edu.degree}** — {edu.institution} | {edu.graduation_date}"
+                for edu in resume.education
+            ]
+            lines.append("")
+        elif section == Section.CERTIFICATIONS and resume.certifications:
+            lines.append("**Certifications**")
+            for cert in resume.certifications:
+                line = f"**{cert.name}** — {cert.issuer}"
+                if cert.date:
+                    line += f" | {cert.date}"
+                lines.append(line)
+            lines.append("")
+        elif section == Section.PROJECTS and resume.projects:
+            lines.append("**Projects**")
+            for proj in resume.projects:
+                lines += [
+                    f"**{proj.name}**: {proj.description}",
+                    f"Technologies: {', '.join(proj.technologies)}",
+                ] + [f"- {b}" for b in proj.bullets]
+                lines.append("")
+    return "\n".join(lines)
 
 
 def _run_pipeline(
@@ -68,13 +142,19 @@ def _run_pipeline(
     page_limit: Optional[int],
     allow_reword: bool,
     include_summary: bool,
+    max_skill_groups: Optional[int] = None,
     status,  # st.status container
     previous_resume: Optional[ResumeBodyJSON] = None,
     review_feedback: Optional[ReviewJSON] = None,
-) -> tuple[ResumeBodyJSON, ReviewJSON]:
+) -> tuple[ResumeBodyJSON, ReviewJSON, int, int]:
     label = "Refinement pass" if previous_resume is not None else "Tailoring resume"
 
     status.write(f"**Step 1 of 2 — {label}** (model: `claude-sonnet-4-6`)")
+    progress_placeholder = status.empty()
+
+    def _on_tailor_progress(approx_tokens: int) -> None:
+        progress_placeholder.caption(f"Generating… ~{approx_tokens:,} tokens")
+
     tailor_result: TailoringResult = tailoring_agent.run(
         resume_text=resume_text,
         job_listing=job_listing,
@@ -82,13 +162,16 @@ def _run_pipeline(
         page_limit=page_limit,
         allow_reword=allow_reword,
         include_summary=include_summary,
+        max_skill_groups=max_skill_groups,
         previous_resume=previous_resume,
         review_feedback=review_feedback,
+        progress_callback=_on_tailor_progress,
         api_key=api_key,
     )
+    progress_placeholder.empty()
     status.write(
-        f"  Done — {tailor_result.input_tokens:,} tokens in, "
-        f"{tailor_result.output_tokens:,} tokens out."
+        f"  Done — {tailor_result.input_tokens:,} in, "
+        f"{tailor_result.output_tokens:,} out."
     )
 
     status.write("**Step 2 of 2 — Reviewing resume** (model: `claude-sonnet-4-6`)")
@@ -100,11 +183,13 @@ def _run_pipeline(
         api_key=api_key,
     )
     status.write(
-        f"  Done — {review_result.input_tokens:,} tokens in, "
-        f"{review_result.output_tokens:,} tokens out."
+        f"  Done — {review_result.input_tokens:,} in, "
+        f"{review_result.output_tokens:,} out."
     )
 
-    return tailor_result.resume, review_result.review
+    total_in = tailor_result.input_tokens + review_result.input_tokens
+    total_out = tailor_result.output_tokens + review_result.output_tokens
+    return tailor_result.resume, review_result.review, total_in, total_out
 
 
 def _render_resume_preview(resume: ResumeBodyJSON, template: Template) -> None:
@@ -252,12 +337,45 @@ with st.sidebar:
     st.subheader("Contact Information")
     st.caption("Never sent to the AI — injected into your document locally.")
 
-    contact_name = st.text_input("Full Name *", placeholder="Jane Smith")
-    contact_email = st.text_input("Email *", placeholder="jane@example.com")
-    contact_phone = st.text_input("Phone", placeholder="+1 555 123 4567")
-    contact_location = st.text_input("Location", placeholder="San Francisco, CA")
-    contact_linkedin = st.text_input("LinkedIn URL", placeholder="linkedin.com/in/janesmith")
-    contact_github = st.text_input("GitHub URL", placeholder="github.com/janesmith")
+    contact_name = st.text_input("Full Name *", placeholder="Jane Smith", key="ss_name")
+    contact_email = st.text_input("Email *", placeholder="jane@example.com", key="ss_email")
+    contact_phone = st.text_input("Phone", placeholder="+1 555 123 4567", key="ss_phone")
+    contact_location = st.text_input("Location", placeholder="San Francisco, CA", key="ss_location")
+    contact_linkedin = st.text_input("LinkedIn URL", placeholder="linkedin.com/in/janesmith", key="ss_linkedin")
+    contact_github = st.text_input("GitHub URL", placeholder="github.com/janesmith", key="ss_github")
+
+    st.divider()
+    st.subheader("Session")
+
+    uploaded_session = st.file_uploader("Load saved session", type="json", label_visibility="collapsed")
+    if uploaded_session is not None:
+        try:
+            data = json.loads(uploaded_session.read())
+            st.session_state.ss_resume_text = data.get("resume_text", "")
+            st.session_state.ss_job_listing = data.get("job_listing", "")
+            st.session_state.ss_target_role = data.get("target_role", "")
+            contact = data.get("contact", {})
+            for field in ("ss_name", "ss_email", "ss_phone", "ss_location", "ss_linkedin", "ss_github"):
+                key = field[3:]  # strip "ss_" prefix to get contact dict key
+                st.session_state[field] = contact.get(key, "")
+            st.rerun()
+        except Exception:
+            st.error("Could not parse session file.")
+
+    session_data = json.dumps({
+        "resume_text": st.session_state.get("ss_resume_text", ""),
+        "job_listing": st.session_state.get("ss_job_listing", ""),
+        "target_role": st.session_state.get("ss_target_role", ""),
+        "contact": {
+            "name": st.session_state.get("ss_name", ""),
+            "email": st.session_state.get("ss_email", ""),
+            "phone": st.session_state.get("ss_phone", ""),
+            "location": st.session_state.get("ss_location", ""),
+            "linkedin": st.session_state.get("ss_linkedin", ""),
+            "github": st.session_state.get("ss_github", ""),
+        },
+    }, indent=2).encode()
+    st.download_button("Save inputs", data=session_data, file_name="apply_session.json", mime="application/json")
 
     st.divider()
     st.subheader("Settings")
@@ -270,6 +388,7 @@ with st.sidebar:
     target_role = st.text_input(
         "Target Role (optional)",
         placeholder="e.g. Senior Software Engineer",
+        key="ss_target_role",
     )
     page_limit_enabled = st.checkbox("Enforce page limit")
     page_limit: Optional[int] = None
@@ -298,6 +417,7 @@ with col_left:
         placeholder=(
             "Paste your current resume text, or a bullet-point list of your skills and experience."
         ),
+        key="ss_resume_text",
     )
 
 with col_right:
@@ -305,6 +425,7 @@ with col_right:
         "Job Listing",
         height=300,
         placeholder="Paste the full job description here.",
+        key="ss_job_listing",
     )
 
 # ---------------------------------------------------------------------------
@@ -339,10 +460,13 @@ if st.button(generate_label, type="primary", disabled=generate_disabled, use_con
     st.session_state.refinement_count = 0
     st.session_state.docx_bytes = None
     st.session_state.selected_template_id = DEFAULT_TEMPLATE.id
+    st.session_state.previous_resume_md = None
+    st.session_state.total_input_tokens = 0
+    st.session_state.total_output_tokens = 0
 
     try:
         with st.status("Running pipeline...", expanded=True) as status:
-            resume, review = _run_pipeline(
+            resume, review, in_tok, out_tok = _run_pipeline(
                 api_key=api_key,
                 resume_text=resume_text,
                 job_listing=job_listing,
@@ -350,11 +474,14 @@ if st.button(generate_label, type="primary", disabled=generate_disabled, use_con
                 page_limit=page_limit,
                 allow_reword=allow_reword,
                 include_summary=include_summary,
+                max_skill_groups=TEMPLATES[DEFAULT_TEMPLATE.id].max_skill_groups,
                 status=status,
             )
             status.update(label="Pipeline complete.", state="complete", expanded=False)
         st.session_state.resume_body = resume
         st.session_state.review = review
+        st.session_state.total_input_tokens = in_tok
+        st.session_state.total_output_tokens = out_tok
     except anthropic.AuthenticationError:
         st.error("Invalid API key. Check your key and try again.")
     except anthropic.RateLimitError:
@@ -384,13 +511,17 @@ if (
     if st.button(refine_label, use_container_width=True):
         st.session_state.running = True
         prev_score = st.session_state.review.score if st.session_state.review else None
+        current_template = TEMPLATES[st.session_state.selected_template_id]
+        st.session_state.previous_resume_md = _resume_to_markdown(
+            st.session_state.resume_body, current_template
+        )
 
         try:
             with st.status(
                 f"Running refinement {st.session_state.refinement_count + 1} of {MAX_REFINEMENTS}...",
                 expanded=True,
             ) as status:
-                resume, review = _run_pipeline(
+                resume, review, in_tok, out_tok = _run_pipeline(
                     api_key=api_key,
                     resume_text=resume_text,
                     job_listing=job_listing,
@@ -398,6 +529,7 @@ if (
                     page_limit=page_limit,
                     allow_reword=allow_reword,
                     include_summary=include_summary,
+                    max_skill_groups=current_template.max_skill_groups,
                     previous_resume=st.session_state.resume_body,
                     review_feedback=st.session_state.review,
                     status=status,
@@ -408,6 +540,8 @@ if (
             st.session_state.review = review
             st.session_state.refinement_count += 1
             st.session_state.docx_bytes = None
+            st.session_state.total_input_tokens += in_tok
+            st.session_state.total_output_tokens += out_tok
         except anthropic.AuthenticationError:
             st.error("Invalid API key. Check your key and try again.")
         except anthropic.RateLimitError:
@@ -440,19 +574,52 @@ if st.session_state.resume_body is not None:
         )
 
     # Template selector
-    template_names = [t.name for t in TEMPLATES.values()]
+    templates_list = list(TEMPLATES.values())
     template_ids = list(TEMPLATES.keys())
     current_index = template_ids.index(st.session_state.selected_template_id)
-    selected_name = st.radio(
+    selected_template = st.radio(
         "Template",
-        template_names,
+        options=templates_list,
         index=current_index,
+        format_func=lambda t: t.name,
+        captions=[t.description for t in templates_list],
         horizontal=True,
-        label_visibility="collapsed",
     )
-    selected_template_id = template_ids[template_names.index(selected_name)]
-    st.session_state.selected_template_id = selected_template_id
-    selected_template = TEMPLATES[selected_template_id]
+    st.session_state.selected_template_id = selected_template.id
+
+    # Refinement diff view
+    if st.session_state.previous_resume_md is not None and st.session_state.resume_body is not None:
+        new_md = _resume_to_markdown(st.session_state.resume_body, selected_template)
+        diff_lines = list(difflib.unified_diff(
+            st.session_state.previous_resume_md.splitlines(),
+            new_md.splitlines(),
+            lineterm="",
+            n=1,
+        ))
+        if diff_lines:
+            with st.expander("What changed in this refinement", expanded=False):
+                html_lines = []
+                for line in diff_lines[2:]:  # skip the --- +++ header lines
+                    if line.startswith("+"):
+                        html_lines.append(
+                            f'<span style="background:#d4edda;color:#155724;display:block">{line}</span>'
+                        )
+                    elif line.startswith("-"):
+                        html_lines.append(
+                            f'<span style="background:#f8d7da;color:#721c24;display:block">{line}</span>'
+                        )
+                    elif line.startswith("@@"):
+                        html_lines.append(
+                            f'<span style="color:#6c757d;display:block">{line}</span>'
+                        )
+                    else:
+                        html_lines.append(
+                            f'<span style="color:#495057;display:block">{line}</span>'
+                        )
+                st.markdown(
+                    '<pre style="font-size:0.8rem;line-height:1.4">' + "".join(html_lines) + "</pre>",
+                    unsafe_allow_html=True,
+                )
 
     res_col, rev_col = st.columns([3, 2])
 
@@ -477,3 +644,12 @@ if st.session_state.resume_body is not None:
         github=contact_github or None,
     )
     _render_export_buttons(contact, selected_template)
+
+    total_in = st.session_state.total_input_tokens
+    total_out = st.session_state.total_output_tokens
+    if total_in or total_out:
+        st.caption(
+            f"Estimated cost: {_estimate_cost(total_in, total_out)}",
+            help="Based on Claude Sonnet 4.6 list pricing ($3/M input, $15/M output). "
+                 "Cumulative across all generation and refinement passes.",
+        )

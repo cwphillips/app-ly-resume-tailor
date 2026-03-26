@@ -26,11 +26,15 @@ def convert(docx_bytes: bytes, fmt: Literal["pdf", "odt"]) -> bytes:
         src = Path(tmp) / "resume.docx"
         src.write_bytes(docx_bytes)
 
-        result = subprocess.run(
-            ["soffice", "--headless", "--convert-to", fmt, "--outdir", tmp, str(src)],
-            check=False,
-            capture_output=True,
-        )
+        try:
+            result = subprocess.run(
+                ["soffice", "--headless", "--convert-to", fmt, "--outdir", tmp, str(src)],
+                check=False,
+                capture_output=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("LibreOffice conversion timed out after 30s.")
 
         if result.returncode != 0:
             stderr = result.stderr.decode(errors="replace")
