@@ -590,6 +590,15 @@ if st.session_state.refinement_count >= MAX_REFINEMENTS:
 if st.session_state.resume_body is not None:
     st.divider()
 
+    total_in = st.session_state.get("total_input_tokens", 0)
+    total_out = st.session_state.get("total_output_tokens", 0)
+    if total_in or total_out:
+        st.caption(
+            f"Estimated cost: {_estimate_cost(total_in, total_out)}",
+            help="Based on Claude Sonnet 4.6 list pricing ($3/M input, $15/M output). "
+                 "Cumulative across all generation and refinement passes.",
+        )
+
     # Skipped sections callout
     skipped = st.session_state.resume_body.skipped_sections
     if skipped:
