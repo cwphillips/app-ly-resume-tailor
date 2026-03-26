@@ -49,11 +49,13 @@ Alternatively, paste it directly into the **Anthropic API Key** field in the app
 
 Paste your existing resume text (or a raw list of skills and experience) and a job listing. The app calls Claude to produce a tailored resume body that mirrors the job listing's keywords and ranks your experience by relevance.
 
-After generation, up to two **refinement passes** are available. Each pass takes the current resume and the AI reviewer's feedback and produces an improved version — no extra input required.
+After generation, up to two **refinement passes** are available. Each pass takes the current resume and the AI reviewer's feedback and produces an improved version — no extra input required. After each refinement, a colour-coded **diff view** shows exactly what changed.
 
 ### AI review
 
 Every generation and refinement pass is automatically followed by a structured review: a 0–100 ATS + hiring-manager score, strengths, concerns, and ranked suggestions. The score delta is shown after each refinement so you can track improvement.
+
+An **estimated cost** (based on Claude Sonnet 4.6 list pricing) is displayed after each run, cumulative across all generation and refinement passes.
 
 ### Resume sections
 
@@ -70,7 +72,7 @@ The app supports the following resume sections. Optional sections are only inclu
 
 ### Templates
 
-After generation, choose from three built-in templates that control section order and how many skill groups are shown. Switching templates is instant — no API call needed.
+After generation, choose from three built-in templates that control section order and how many skill groups are shown. Each option shows a short description to help you pick the right one. Switching templates is instant — no API call needed.
 
 | Template | Section order | Skill groups |
 |---|---|---|
@@ -86,6 +88,10 @@ The sidebar Settings section includes two toggles:
 - **Include summary** *(on by default)* — when disabled, no summary section is generated. Note: if rewording is disabled but a summary is included, Claude still needs to compose the summary from your source material.
 
 Both settings apply to the current run (generate or refine) and can be changed between passes.
+
+### Session save / load
+
+Use the **Save inputs** button in the sidebar to download your current inputs (resume text, job listing, target role, and contact fields) as a JSON file. Upload that file on a future visit to restore everything in one step — useful if you work on multiple job applications or pick up where you left off after closing the browser.
 
 ### Export
 
@@ -117,4 +123,4 @@ uv run pytest
 
 - Resume content and the job listing are sent to Anthropic's API for tailoring and review.
 - Contact information (name, email, phone, location, LinkedIn, GitHub) is **never** sent to the API — it is collected locally and injected into the document at render time only.
-- No data is persisted between sessions.
+- No data is persisted server-side between sessions. The optional session save feature writes a file to your local machine only.
