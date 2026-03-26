@@ -600,19 +600,21 @@ if st.session_state.resume_body is not None:
             "Add that content to your resume text and regenerate to include them."
         )
 
-    # Template selector
-    templates_list = list(TEMPLATES.values())
+    # Template selector — key= lets Streamlit own the state directly,
+    # avoiding the double-click bug caused by index= conflicting with
+    # internal widget state when session state is updated manually.
     template_ids = list(TEMPLATES.keys())
     current_index = template_ids.index(st.session_state.selected_template_id)
-    selected_template = st.radio(
+    st.radio(
         "Template",
-        options=templates_list,
+        options=template_ids,
+        format_func=lambda tid: TEMPLATES[tid].name,
+        captions=[TEMPLATES[tid].description for tid in template_ids],
         index=current_index,
-        format_func=lambda t: t.name,
-        captions=[t.description for t in templates_list],
         horizontal=True,
+        key="selected_template_id",
     )
-    st.session_state.selected_template_id = selected_template.id
+    selected_template = TEMPLATES[st.session_state.selected_template_id]
 
     # Refinement diff view
     if st.session_state.previous_resume_md is not None and st.session_state.resume_body is not None:
