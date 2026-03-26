@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import anthropic
@@ -65,15 +66,17 @@ def run(
     page_limit: int | None = None,
     allow_reword: bool = True,
     include_summary: bool = True,
+    max_skill_groups: int | None = None,
     previous_resume: ResumeBodyJSON | None = None,
     review_feedback: ReviewJSON | None = None,
+    progress_callback: Callable[[int], None] | None = None,
     api_key: str,
 ) -> TailoringResult:
     """Call the TailoringAgent and return a TailoringResult with the resume and token usage.
 
     Contact fields must NOT be passed to this function — they are injected at render time only.
     """
-    client = anthropic.Anthropic(api_key=api_key)
+    client = anthropic.Anthropic(api_key=api_key, max_retries=2)
 
     parts: list[str] = []
 
@@ -118,16 +121,33 @@ def run(
             "Do NOT generate a summary. Return null for the `summary` field."
         )
 
+    if max_skill_groups is not None:
+        parts.append(
+            f"## Skill Group Limit\n"
+            f"Generate at most {max_skill_groups} skill groups. "
+            "Choose the most relevant categories for this role."
+        )
+
     prompt = "\n\n".join(parts)
 
-    response = client.messages.create(
+    json_chars = 0
+    with client.messages.stream(
         model=MODEL,
         max_tokens=4096,
         system=SYSTEM_PROMPT,
         tools=[TAILORING_TOOL],
         tool_choice={"type": "tool", "name": "submit_resume"},
         messages=[{"role": "user", "content": prompt}],
-    )
+    ) as stream:
+        for event in stream:
+            if (
+                event.type == "content_block_delta"
+                and event.delta.type == "input_json_delta"
+            ):
+                json_chars += len(event.delta.partial_json)
+                if progress_callback is not None:
+                    progress_callback(max(1, json_chars // 4))
+        response = stream.get_final_message()
 
     tool_use_block = next(
         (b for b in response.content if b.type == "tool_use"), None

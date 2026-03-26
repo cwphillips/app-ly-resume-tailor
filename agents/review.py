@@ -52,7 +52,7 @@ def run(
     api_key: str,
 ) -> ReviewResult:
     """Call the ReviewAgent and return a ReviewResult with the review and token usage."""
-    client = anthropic.Anthropic(api_key=api_key)
+    client = anthropic.Anthropic(api_key=api_key, max_retries=2)
 
     parts: list[str] = [
         f"## Resume Body (JSON)\n```json\n{resume.model_dump_json(indent=2)}\n```",
