@@ -78,6 +78,27 @@ def _resolve_api_key(ui_key: str) -> str:
     return ui_key.strip() or os.environ.get("ANTHROPIC_API_KEY", "")
 
 
+def _load_session_file() -> None:
+    """on_change callback for the session file uploader.
+
+    Callbacks run before any widget renders in the new script pass, so all
+    session state keys can be set freely regardless of widget order.
+    """
+    uploaded = st.session_state.get("_session_uploader")
+    if uploaded is None:
+        return
+    try:
+        data = json.loads(uploaded.read())
+        st.session_state.ss_resume_text = data.get("resume_text", "")
+        st.session_state.ss_job_listing = data.get("job_listing", "")
+        st.session_state.ss_target_role = data.get("target_role", "")
+        contact = data.get("contact", {})
+        for field in ("ss_name", "ss_email", "ss_phone", "ss_location", "ss_linkedin", "ss_github"):
+            st.session_state[field] = contact.get(field[3:], "")
+    except Exception:
+        st.session_state["_session_load_error"] = True
+
+
 def _estimate_cost(input_tokens: int, output_tokens: int) -> str:
     cost = (input_tokens * _INPUT_COST_PER_M + output_tokens * _OUTPUT_COST_PER_M) / 1_000_000
     return f"~${cost:.3f}"
@@ -347,20 +368,16 @@ with st.sidebar:
     st.divider()
     st.subheader("Session")
 
-    uploaded_session = st.file_uploader("Load saved session", type="json", label_visibility="collapsed")
-    if uploaded_session is not None:
-        try:
-            data = json.loads(uploaded_session.read())
-            st.session_state.ss_resume_text = data.get("resume_text", "")
-            st.session_state.ss_job_listing = data.get("job_listing", "")
-            st.session_state.ss_target_role = data.get("target_role", "")
-            contact = data.get("contact", {})
-            for field in ("ss_name", "ss_email", "ss_phone", "ss_location", "ss_linkedin", "ss_github"):
-                key = field[3:]  # strip "ss_" prefix to get contact dict key
-                st.session_state[field] = contact.get(key, "")
-            st.rerun()
-        except Exception:
-            st.error("Could not parse session file.")
+    st.file_uploader(
+        "Load saved session",
+        type="json",
+        key="_session_uploader",
+        on_change=_load_session_file,
+        label_visibility="collapsed",
+    )
+    if st.session_state.get("_session_load_error"):
+        st.error("Could not parse session file.")
+        del st.session_state["_session_load_error"]
 
     session_data = json.dumps({
         "resume_text": st.session_state.get("ss_resume_text", ""),
