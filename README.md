@@ -43,6 +43,54 @@ uv run streamlit run app.py
 
 Alternatively, paste it directly into the **Anthropic API Key** field in the app sidebar each session.
 
+## Features
+
+### Resume tailoring
+
+Paste your existing resume text (or a raw list of skills and experience) and a job listing. The app calls Claude to produce a tailored resume body that mirrors the job listing's keywords and ranks your experience by relevance.
+
+After generation, up to two **refinement passes** are available. Each pass takes the current resume and the AI reviewer's feedback and produces an improved version — no extra input required.
+
+### AI review
+
+Every generation and refinement pass is automatically followed by a structured review: a 0–100 ATS + hiring-manager score, strengths, concerns, and ranked suggestions. The score delta is shown after each refinement so you can track improvement.
+
+### Resume sections
+
+The app supports the following resume sections. Optional sections are only included when the source material contains relevant content:
+
+| Section | Required |
+|---|---|
+| Summary | Optional (toggle in sidebar) |
+| Experience | Yes |
+| Skills | Yes |
+| Education | Yes |
+| Certifications | Optional |
+| Projects | Optional |
+
+### Templates
+
+After generation, choose from three built-in templates that control section order and how many skill groups are shown. Switching templates is instant — no API call needed.
+
+| Template | Section order | Skill groups |
+|---|---|---|
+| Standard | Summary → Experience → Skills → Education | up to 5 |
+| Technical | Summary → Skills → Experience → Projects → Education | up to 6 |
+| Recent Graduate | Summary → Education → Experience → Skills → Projects | up to 4 |
+
+### Generation controls
+
+The sidebar Settings section includes two toggles:
+
+- **Allow rewording** *(on by default)* — when enabled, Claude may rephrase and reword your content to better match the job listing. When disabled, bullet points and skills are copied verbatim from your source material; only selection and ordering change.
+- **Include summary** *(on by default)* — when disabled, no summary section is generated. Note: if rewording is disabled but a summary is included, Claude still needs to compose the summary from your source material.
+
+Both settings apply to the current run (generate or refine) and can be changed between passes.
+
+### Export
+
+Download your tailored resume as a **DOCX** file. The exported document always reflects the currently selected template.
+
 ## PDF and ODT export
 
 Install LibreOffice and ensure `soffice` is on your PATH:
@@ -58,6 +106,12 @@ sudo apt install libreoffice --no-install-recommends
 ```
 
 Restart the app after installing. PDF and ODT download buttons will appear automatically.
+
+## Running the tests
+
+```bash
+uv run pytest
+```
 
 ## Privacy
 

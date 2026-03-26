@@ -63,6 +63,8 @@ def run(
     job_listing: str,
     target_role: str = "",
     page_limit: int | None = None,
+    allow_reword: bool = True,
+    include_summary: bool = True,
     previous_resume: ResumeBodyJSON | None = None,
     review_feedback: ReviewJSON | None = None,
     api_key: str,
@@ -100,6 +102,20 @@ def run(
         parts.append(
             f"## Page Limit\nThe final resume must fit on {page_limit} page(s). "
             "Trim content aggressively to meet this constraint."
+        )
+
+    if not allow_reword:
+        parts.append(
+            "## Verbatim Content Constraint\n"
+            "You must NOT reword, rephrase, or paraphrase any bullet points or skills. "
+            "Copy them exactly as written in the source material. "
+            "You may only select which items to include and reorder them by relevance."
+        )
+
+    if not include_summary:
+        parts.append(
+            "## No Summary\n"
+            "Do NOT generate a summary. Return null for the `summary` field."
         )
 
     prompt = "\n\n".join(parts)

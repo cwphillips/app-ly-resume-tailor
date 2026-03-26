@@ -261,6 +261,19 @@ def test_template_section_order_respected():
     assert skills_idx < exp_idx
 
 
+def test_none_summary_silently_skipped():
+    resume = _make_resume(summary=None)
+    doc = Document(io.BytesIO(render(resume, _make_contact())))
+    text = _full_text(doc)
+    assert "SUMMARY" not in text.upper()
+
+
+def test_none_summary_does_not_raise():
+    resume = _make_resume(summary=None)
+    result = render(resume, _make_contact())
+    assert isinstance(result, bytes)
+
+
 def test_standard_template_omits_projects():
     resume = _make_resume(
         projects=[

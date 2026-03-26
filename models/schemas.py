@@ -48,7 +48,13 @@ class ProjectEntry(BaseModel):
 
 
 class ResumeBodyJSON(BaseModel):
-    summary: str = Field(description="A concise professional summary (2-4 sentences).")
+    summary: Optional[str] = Field(
+        default=None,
+        description=(
+            "A concise professional summary (2-4 sentences). "
+            "Return null if the caller has requested no summary."
+        ),
+    )
     rationale: str = Field(
         description=(
             "A brief explanation (3-6 sentences) of the tailoring decisions made: "

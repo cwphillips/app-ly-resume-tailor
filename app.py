@@ -66,6 +66,8 @@ def _run_pipeline(
     job_listing: str,
     target_role: str,
     page_limit: Optional[int],
+    allow_reword: bool,
+    include_summary: bool,
     status,  # st.status container
     previous_resume: Optional[ResumeBodyJSON] = None,
     review_feedback: Optional[ReviewJSON] = None,
@@ -78,6 +80,8 @@ def _run_pipeline(
         job_listing=job_listing,
         target_role=target_role,
         page_limit=page_limit,
+        allow_reword=allow_reword,
+        include_summary=include_summary,
         previous_resume=previous_resume,
         review_feedback=review_feedback,
         api_key=api_key,
@@ -109,7 +113,7 @@ def _render_resume_preview(resume: ResumeBodyJSON, template: Template) -> None:
     st.subheader("Resume Preview")
 
     for section in template.sections:
-        if section == Section.SUMMARY:
+        if section == Section.SUMMARY and resume.summary:
             st.markdown(f"**Summary**\n\n{resume.summary}")
 
         elif section == Section.EXPERIENCE:
@@ -272,6 +276,14 @@ with st.sidebar:
     if page_limit_enabled:
         page_limit = st.number_input("Page limit", min_value=1, max_value=4, value=1, step=1)
 
+    allow_reword = st.checkbox("Allow rewording", value=True)
+    include_summary = st.checkbox("Include summary", value=True)
+    if not allow_reword and include_summary:
+        st.caption(
+            "Rewording is off, but the summary still requires the LLM to compose "
+            "text from your source material."
+        )
+
 # ---------------------------------------------------------------------------
 # Main content area
 # ---------------------------------------------------------------------------
@@ -336,6 +348,8 @@ if st.button(generate_label, type="primary", disabled=generate_disabled, use_con
                 job_listing=job_listing,
                 target_role=target_role,
                 page_limit=page_limit,
+                allow_reword=allow_reword,
+                include_summary=include_summary,
                 status=status,
             )
             status.update(label="Pipeline complete.", state="complete", expanded=False)
@@ -382,6 +396,8 @@ if (
                     job_listing=job_listing,
                     target_role=target_role,
                     page_limit=page_limit,
+                    allow_reword=allow_reword,
+                    include_summary=include_summary,
                     previous_resume=st.session_state.resume_body,
                     review_feedback=st.session_state.review,
                     status=status,

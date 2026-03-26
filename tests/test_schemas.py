@@ -53,9 +53,23 @@ def test_resume_body_valid():
 
 def test_resume_body_missing_required_field():
     data = _valid_resume()
-    del data["summary"]
+    del data["rationale"]
     with pytest.raises(ValidationError):
         ResumeBodyJSON(**data)
+
+
+def test_resume_body_summary_optional():
+    data = _valid_resume()
+    del data["summary"]
+    resume = ResumeBodyJSON(**data)
+    assert resume.summary is None
+
+
+def test_resume_body_summary_explicit_none():
+    data = _valid_resume()
+    data["summary"] = None
+    resume = ResumeBodyJSON(**data)
+    assert resume.summary is None
 
 
 def test_resume_body_empty_skills_rejected():

@@ -65,6 +65,8 @@ def _add_contact_line(doc: Document, contact: ContactFields) -> None:
 
 
 def _render_summary(doc: Document, resume: ResumeBodyJSON, template: Template) -> None:
+    if not resume.summary:
+        return
     _add_section_header(doc, "Summary")
     summary_para = doc.add_paragraph()
     summary_para.paragraph_format.space_after = Pt(4)

@@ -63,6 +63,8 @@ def _build_tailoring_prompt(
     job_listing: str,
     target_role: str = "",
     page_limit=None,
+    allow_reword: bool = True,
+    include_summary: bool = True,
     previous_resume=None,
     review_feedback=None,
 ) -> str:
@@ -96,6 +98,20 @@ def _build_tailoring_prompt(
         parts.append(
             f"## Page Limit\nThe final resume must fit on {page_limit} page(s). "
             "Trim content aggressively to meet this constraint."
+        )
+
+    if not allow_reword:
+        parts.append(
+            "## Verbatim Content Constraint\n"
+            "You must NOT reword, rephrase, or paraphrase any bullet points or skills. "
+            "Copy them exactly as written in the source material. "
+            "You may only select which items to include and reorder them by relevance."
+        )
+
+    if not include_summary:
+        parts.append(
+            "## No Summary\n"
+            "Do NOT generate a summary. Return null for the `summary` field."
         )
 
     return "\n\n".join(parts)
@@ -208,3 +224,66 @@ def test_review_agent_run_has_no_contact_parameter():
     assert "contact" not in sig.parameters, (
         "ReviewAgent.run() must not accept a 'contact' parameter."
     )
+
+
+# ---------------------------------------------------------------------------
+# allow_reword and include_summary prompt constraints
+# ---------------------------------------------------------------------------
+
+def test_verbatim_constraint_present_when_reword_disabled():
+    prompt = _build_tailoring_prompt(
+        resume_text="Skills: Python.",
+        job_listing="Python dev role.",
+        allow_reword=False,
+    )
+    assert "Verbatim Content Constraint" in prompt
+    assert "Copy them exactly as written" in prompt
+
+
+def test_verbatim_constraint_absent_when_reword_enabled():
+    prompt = _build_tailoring_prompt(
+        resume_text="Skills: Python.",
+        job_listing="Python dev role.",
+        allow_reword=True,
+    )
+    assert "Verbatim Content Constraint" not in prompt
+
+
+def test_no_summary_constraint_present_when_summary_disabled():
+    prompt = _build_tailoring_prompt(
+        resume_text="Skills: Python.",
+        job_listing="Python dev role.",
+        include_summary=False,
+    )
+    assert "No Summary" in prompt
+    assert "Return null for the `summary` field" in prompt
+
+
+def test_no_summary_constraint_absent_when_summary_enabled():
+    prompt = _build_tailoring_prompt(
+        resume_text="Skills: Python.",
+        job_listing="Python dev role.",
+        include_summary=True,
+    )
+    assert "No Summary" not in prompt
+
+
+def test_both_constraints_present_when_both_disabled():
+    prompt = _build_tailoring_prompt(
+        resume_text="Skills: Python.",
+        job_listing="Python dev role.",
+        allow_reword=False,
+        include_summary=False,
+    )
+    assert "Verbatim Content Constraint" in prompt
+    assert "No Summary" in prompt
+
+
+def test_constraints_no_pii():
+    prompt = _build_tailoring_prompt(
+        resume_text="I am an engineer.",
+        job_listing="Engineer role.",
+        allow_reword=False,
+        include_summary=False,
+    )
+    _assert_no_pii(prompt)
