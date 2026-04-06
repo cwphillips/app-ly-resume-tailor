@@ -37,9 +37,10 @@ If a page limit was specified, factor in whether the content appears appropriate
 
 OUTPUT:
 - Call the `submit_review` tool with a structured assessment.
-- `strengths`: what the resume does well (be specific, cite examples).
-- `concerns`: issues that could hurt the application (ranked by severity).
-- `suggestions`: actionable improvements ranked by expected impact.
+- Be terse. Each list item must fit on one line (≤25 words). No explanatory prose.
+- `strengths`: up to 3 bullet-style phrases — what the resume does well.
+- `concerns`: up to 3 bullet-style phrases — issues that could hurt the application, ranked by severity.
+- `suggestions`: up to 3 imperative phrases — actionable improvements ranked by expected impact.
 """
 
 
@@ -69,7 +70,7 @@ def run(
 
     response = client.messages.create(
         model=MODEL,
-        max_tokens=2048,
+        max_tokens=768,
         system=SYSTEM_PROMPT,
         tools=[REVIEW_TOOL],
         tool_choice={"type": "tool", "name": "submit_review"},

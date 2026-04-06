@@ -83,10 +83,14 @@ class ResumeBodyJSON(BaseModel):
 
 class ReviewJSON(BaseModel):
     score: int = Field(ge=0, le=100, description="Overall ATS + hiring-manager score (0-100).")
-    strengths: list[str] = Field(description="What the resume does well.")
-    concerns: list[str] = Field(description="Issues that could hurt the application.")
+    strengths: list[str] = Field(
+        description="What the resume does well. Max 3 items. Each item: one sentence, ≤25 words."
+    )
+    concerns: list[str] = Field(
+        description="Issues that could hurt the application. Max 3 items. Each item: one sentence, ≤25 words."
+    )
     suggestions: list[str] = Field(
-        description="Specific, actionable improvements ranked by impact."
+        description="Actionable improvements ranked by impact. Max 3 items. Each item: imperative phrase, ≤25 words."
     )
 
 
