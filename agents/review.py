@@ -37,7 +37,7 @@ If a page limit was specified, factor in whether the content appears appropriate
 
 OUTPUT:
 - Call the `submit_review` tool with a structured assessment.
-- Be terse. Each list item must fit on one line (≤15 words). No explanatory prose.
+- Be terse. Each list item must fit on one line (≤25 words). No explanatory prose.
 - `strengths`: up to 3 bullet-style phrases — what the resume does well.
 - `concerns`: up to 3 bullet-style phrases — issues that could hurt the application, ranked by severity.
 - `suggestions`: up to 3 imperative phrases — actionable improvements ranked by expected impact.
