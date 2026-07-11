@@ -8,17 +8,13 @@ import anthropic
 import streamlit as st
 from dotenv import load_dotenv
 
-import agents.review as review_agent
-import agents.tailoring as tailoring_agent
 import exporters.converter as converter
 import exporters.docx as docx_exporter
+import pipeline
 from agents.errors import MalformedModelOutputError
-from agents.review import ReviewResult
-from agents.tailoring import TailoringResult
 from config import (
     INPUT_PRICE_PER_M,
     MODEL_DISPLAY_NAME,
-    MODEL_ID,
     OUTPUT_PRICE_PER_M,
 )
 from diff_view import diff_to_html
@@ -169,63 +165,30 @@ def _resume_to_markdown(resume: ResumeBodyJSON, template: Template) -> str:
     return "\n".join(lines)
 
 
-def _run_pipeline(
-    *,
-    api_key: str,
-    resume_text: str,
-    job_listing: str,
-    target_role: str,
-    page_limit: int | None,
-    allow_reword: bool,
-    include_summary: bool,
-    max_skill_groups: int | None = None,
-    status,  # st.status container
-    previous_resume: ResumeBodyJSON | None = None,
-    review_feedback: ReviewJSON | None = None,
-) -> tuple[ResumeBodyJSON, ReviewJSON, int, int]:
-    label = "Refinement pass" if previous_resume is not None else "Tailoring resume"
+class _StreamlitProgress(pipeline.ProgressReporter):
+    """Surface pipeline progress inside an ``st.status`` container.
 
-    status.write(f"**Step 1 of 2 — {label}** (model: `{MODEL_ID}`)")
-    progress_placeholder = status.empty()
+    Wraps the orchestration hook so the pipeline itself stays free of any
+    Streamlit dependency. The live token caption lives in a placeholder that is
+    created lazily and cleared when streaming finishes.
+    """
 
-    def _on_tailor_progress(approx_tokens: int) -> None:
-        progress_placeholder.caption(f"Generating… ~{approx_tokens:,} tokens")
+    def __init__(self, status) -> None:  # st.status container
+        self._status = status
+        self._placeholder = None
 
-    tailor_result: TailoringResult = tailoring_agent.run(
-        resume_text=resume_text,
-        job_listing=job_listing,
-        target_role=target_role,
-        page_limit=page_limit,
-        allow_reword=allow_reword,
-        include_summary=include_summary,
-        max_skill_groups=max_skill_groups,
-        previous_resume=previous_resume,
-        review_feedback=review_feedback,
-        progress_callback=_on_tailor_progress,
-        api_key=api_key,
-    )
-    progress_placeholder.empty()
-    status.write(
-        f"  Done — {tailor_result.input_tokens:,} in, "
-        f"{tailor_result.output_tokens:,} out."
-    )
+    def message(self, text: str) -> None:
+        self._status.write(text)
 
-    status.write(f"**Step 2 of 2 — Reviewing resume** (model: `{MODEL_ID}`)")
-    review_result: ReviewResult = review_agent.run(
-        resume=tailor_result.resume,
-        job_listing=job_listing,
-        target_role=target_role,
-        page_limit=page_limit,
-        api_key=api_key,
-    )
-    status.write(
-        f"  Done — {review_result.input_tokens:,} in, "
-        f"{review_result.output_tokens:,} out."
-    )
+    def token_progress(self, approx_tokens: int) -> None:
+        if self._placeholder is None:
+            self._placeholder = self._status.empty()
+        self._placeholder.caption(f"Generating… ~{approx_tokens:,} tokens")
 
-    total_in = tailor_result.input_tokens + review_result.input_tokens
-    total_out = tailor_result.output_tokens + review_result.output_tokens
-    return tailor_result.resume, review_result.review, total_in, total_out
+    def token_progress_done(self) -> None:
+        if self._placeholder is not None:
+            self._placeholder.empty()
+            self._placeholder = None
 
 
 def _render_resume_preview(resume: ResumeBodyJSON, template: Template) -> None:
@@ -529,7 +492,7 @@ if st.button(
 
     try:
         with st.status("Running pipeline...", expanded=True) as status:
-            resume, review, in_tok, out_tok = _run_pipeline(
+            result = pipeline.run_pipeline(
                 api_key=api_key,
                 resume_text=resume_text,
                 job_listing=job_listing,
@@ -538,17 +501,18 @@ if st.button(
                 allow_reword=allow_reword,
                 include_summary=include_summary,
                 max_skill_groups=TEMPLATES[DEFAULT_TEMPLATE.id].max_skill_groups,
-                status=status,
+                progress=_StreamlitProgress(status),
             )
             status.update(
-                label=f"Pipeline complete — estimated cost: {_estimate_cost(in_tok, out_tok)}",
+                label=f"Pipeline complete — estimated cost: "
+                f"{_estimate_cost(result.input_tokens, result.output_tokens)}",
                 state="complete",
                 expanded=False,
             )
-        st.session_state.resume_body = resume
-        st.session_state.review = review
-        st.session_state.total_input_tokens = in_tok
-        st.session_state.total_output_tokens = out_tok
+        st.session_state.resume_body = result.resume
+        st.session_state.review = result.review
+        st.session_state.total_input_tokens = result.input_tokens
+        st.session_state.total_output_tokens = result.output_tokens
     except anthropic.AuthenticationError:
         st.error("Invalid API key. Check your key and try again.")
     except anthropic.RateLimitError:
@@ -589,7 +553,7 @@ if (
                 f"Running refinement {st.session_state.refinement_count + 1} of {MAX_REFINEMENTS}...",
                 expanded=True,
             ) as status:
-                resume, review, in_tok, out_tok = _run_pipeline(
+                result = pipeline.run_pipeline(
                     api_key=api_key,
                     resume_text=resume_text,
                     job_listing=job_listing,
@@ -600,18 +564,18 @@ if (
                     max_skill_groups=current_template.max_skill_groups,
                     previous_resume=st.session_state.resume_body,
                     review_feedback=st.session_state.review,
-                    status=status,
+                    progress=_StreamlitProgress(status),
                 )
-            cumulative_in = st.session_state.total_input_tokens + in_tok
-            cumulative_out = st.session_state.total_output_tokens + out_tok
+            cumulative_in = st.session_state.total_input_tokens + result.input_tokens
+            cumulative_out = st.session_state.total_output_tokens + result.output_tokens
             status.update(
                 label=f"Refinement complete — total estimated cost: {_estimate_cost(cumulative_in, cumulative_out)}",
                 state="complete",
                 expanded=False,
             )
             st.session_state.previous_score = prev_score
-            st.session_state.resume_body = resume
-            st.session_state.review = review
+            st.session_state.resume_body = result.resume
+            st.session_state.review = result.review
             st.session_state.refinement_count += 1
             st.session_state.docx_bytes = None
             st.session_state.total_input_tokens = cumulative_in
