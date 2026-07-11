@@ -45,6 +45,31 @@ uv run streamlit run app.py
 
 Alternatively, paste it directly into the **Anthropic API Key** field in the app sidebar each session.
 
+## Command-line (headless)
+
+The same tailor → review pipeline runs without the browser, so you can script it. It reads `ANTHROPIC_API_KEY` from the environment, writes a DOCX, and prints the review score and suggestions:
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+uv run python cli.py resume.txt job.txt \
+  --name "Jane Smith" --email jane@example.com \
+  --target-role "Senior Backend Engineer" \
+  --output tailored.docx
+```
+
+`resume.txt` and `job.txt` are plain-text files (your resume/skills and the job listing). Contact details are passed as flags and, exactly as in the app, are injected into the document only — they are never sent to the API.
+
+| Option | Description |
+|---|---|
+| `--name`, `--email` | Required — used in the document header only. |
+| `--phone`, `--location`, `--linkedin`, `--github` | Optional contact details. |
+| `--target-role` | Role to tailor toward. |
+| `--page-limit {1-4}` | Constrain the resume to N pages. |
+| `--template {standard,technical,recent_grad}` | Layout template (default: `standard`). |
+| `--output` | Output DOCX path (default: `resume.docx`). |
+
+Run `uv run python cli.py --help` for the full list.
+
 ## Features
 
 ### Resume tailoring
