@@ -17,7 +17,7 @@ from models.schemas import (
     ResumeBodyJSON,
     SkillGroup,
 )
-from resume_sections import walk_sections
+from resume_sections import contact_detail_parts, walk_sections
 from templates.library import DEFAULT_TEMPLATE, Template
 
 
@@ -57,20 +57,10 @@ def _add_contact_line(doc: Document, contact: ContactFields) -> None:
     _set_font(name_run, size_pt=16, bold=True)
 
     # Contact line: email | phone | location | linkedin | github
-    parts: list[str] = [contact.email]
-    if contact.phone:
-        parts.append(contact.phone)
-    if contact.location:
-        parts.append(contact.location)
-    if contact.linkedin:
-        parts.append(contact.linkedin)
-    if contact.github:
-        parts.append(contact.github)
-
     contact_para = doc.add_paragraph()
     contact_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
     contact_para.paragraph_format.space_after = Pt(4)
-    contact_run = contact_para.add_run("  |  ".join(parts))
+    contact_run = contact_para.add_run("  |  ".join(contact_detail_parts(contact)))
     _set_font(contact_run, size_pt=10)
 
 

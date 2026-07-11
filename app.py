@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 
 import exporters.converter as converter
 import exporters.docx as docx_exporter
+import exporters.markdown as markdown_exporter
+import exporters.text as text_exporter
 import pipeline
 from agents.errors import MalformedModelOutputError
 from config import (
@@ -237,12 +239,30 @@ def _render_export_buttons(contact: ContactFields, template: Template) -> None:
     docx_bytes = docx_exporter.render(st.session_state.resume_body, contact, template)
     st.session_state.docx_bytes = docx_bytes
 
-    st.download_button(
-        label="Download DOCX",
-        data=docx_bytes,
-        file_name="resume.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    )
+    col_docx, col_md, col_txt = st.columns(3)
+    with col_docx:
+        st.download_button(
+            label="Download DOCX",
+            data=docx_bytes,
+            file_name="resume.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+    with col_md:
+        st.download_button(
+            label="Download Markdown",
+            data=markdown_exporter.render(
+                st.session_state.resume_body, contact, template
+            ),
+            file_name="resume.md",
+            mime="text/markdown",
+        )
+    with col_txt:
+        st.download_button(
+            label="Download plain text",
+            data=text_exporter.render(st.session_state.resume_body, contact, template),
+            file_name="resume.txt",
+            mime="text/plain",
+        )
 
     if st.session_state.libreoffice_available:
         col_pdf, col_odt = st.columns(2)
