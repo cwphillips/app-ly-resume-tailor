@@ -25,6 +25,7 @@ def test_both_agents_use_the_config_model_id():
 
 
 def test_both_agents_import_the_shared_retry_count():
-    # Both agents wire the SDK client to config.MAX_API_RETRIES.
-    assert tailoring_agent.MAX_API_RETRIES is config.MAX_API_RETRIES
-    assert review_agent.MAX_API_RETRIES is config.MAX_API_RETRIES
+    # Both agents wire the SDK client to config.MAX_API_RETRIES. Compare by value
+    # (not identity) so the check doesn't rely on small-int interning.
+    assert tailoring_agent.MAX_API_RETRIES == config.MAX_API_RETRIES
+    assert review_agent.MAX_API_RETRIES == config.MAX_API_RETRIES

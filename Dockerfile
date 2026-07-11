@@ -8,8 +8,9 @@
 
 FROM python:3.13-slim
 
-# uv provides fast, reproducible installs from the committed uv.lock.
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+# uv provides fast, reproducible installs from the committed uv.lock. Pin the uv
+# version so the build stays reproducible (bump deliberately).
+COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /bin/
 
 # --- Optional: LibreOffice for PDF/ODT export (large; disabled by default) ---
 # RUN apt-get update \
@@ -32,5 +33,10 @@ RUN uv sync --frozen --no-dev
 # ANTHROPIC_API_KEY is supplied at run time via `docker run -e ...`.
 EXPOSE 8501
 
-CMD ["uv", "run", "streamlit", "run", "app.py", \
+# Local-first tool: opt out of Streamlit's usage telemetry.
+ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+
+# --frozen --no-sync: deps are already installed above, so skip uv's implicit
+# resolution/sync at startup for a faster, deterministic launch.
+CMD ["uv", "run", "--frozen", "--no-sync", "streamlit", "run", "app.py", \
      "--server.address=0.0.0.0", "--server.port=8501"]
