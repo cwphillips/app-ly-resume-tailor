@@ -14,6 +14,7 @@ import exporters.converter as converter
 import exporters.docx as docx_exporter
 from agents.review import ReviewResult
 from agents.tailoring import TailoringResult
+from input_normalization import normalize_resume_text
 from models.schemas import ContactFields, ResumeBodyJSON, ReviewJSON
 from templates.library import DEFAULT_TEMPLATE, TEMPLATES, Template
 
@@ -467,6 +468,11 @@ with col_left:
         ),
         key="ss_resume_text",
     )
+
+# Conservatively clean up pasted resume text (PDF artifacts, bullet glyphs,
+# smart quotes, blank-line runs) before it reaches the tailoring agent. The
+# widget keeps the user's raw input; only the value sent downstream is cleaned.
+resume_text = normalize_resume_text(resume_text)
 
 with col_right:
     job_listing = st.text_area(
