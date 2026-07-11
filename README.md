@@ -124,7 +124,7 @@ Use the **Save inputs** button in the sidebar to download your current inputs (r
 
 ### Export
 
-Download your tailored resume as a **DOCX** file. The exported document always reflects the currently selected template.
+Download your tailored resume as a **DOCX**, **Markdown** (`.md`), or **plain-text** (`.txt`) file. Markdown keeps your content verbatim (no escaping) for editing or publishing; plain text is ASCII-only for clean pasting into any text field. All formats reflect the currently selected template.
 
 ## PDF and ODT export
 

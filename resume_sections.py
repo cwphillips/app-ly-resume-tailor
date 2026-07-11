@@ -17,6 +17,7 @@ from typing import Protocol
 
 from models.schemas import (
     CertificationEntry,
+    ContactFields,
     EducationEntry,
     ExperienceEntry,
     ProjectEntry,
@@ -32,6 +33,19 @@ def capped_skills(resume: ResumeBodyJSON, template: Template) -> list[SkillGroup
     if template.max_skill_groups is not None:
         groups = groups[: template.max_skill_groups]
     return groups
+
+
+def contact_detail_parts(contact: ContactFields) -> list[str]:
+    """Return the non-name contact details in display order, omitting blanks.
+
+    Shared by every exporter so the field order (email, phone, location,
+    LinkedIn, GitHub) is defined in exactly one place.
+    """
+    parts = [contact.email]
+    for value in (contact.phone, contact.location, contact.linkedin, contact.github):
+        if value:
+            parts.append(value)
+    return parts
 
 
 class SectionVisitor(Protocol):
