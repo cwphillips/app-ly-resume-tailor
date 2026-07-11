@@ -7,6 +7,7 @@ import anthropic
 from pydantic import ValidationError
 
 from agents.errors import MalformedModelOutputError
+from config import MODEL_ID
 from models.schemas import TAILORING_TOOL, ResumeBodyJSON, ReviewJSON
 
 
@@ -15,9 +16,6 @@ class TailoringResult:
     resume: ResumeBodyJSON
     input_tokens: int
     output_tokens: int
-
-
-MODEL = "claude-sonnet-4-6"
 
 
 def _parse_resume(tool_input: dict) -> ResumeBodyJSON:
@@ -152,7 +150,7 @@ def run(
 
     json_chars = 0
     with client.messages.stream(
-        model=MODEL,
+        model=MODEL_ID,
         max_tokens=4096,
         system=SYSTEM_PROMPT,
         tools=[TAILORING_TOOL],

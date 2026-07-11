@@ -15,6 +15,12 @@ import exporters.docx as docx_exporter
 from agents.errors import MalformedModelOutputError
 from agents.review import ReviewResult
 from agents.tailoring import TailoringResult
+from config import (
+    INPUT_PRICE_PER_M,
+    MODEL_DISPLAY_NAME,
+    MODEL_ID,
+    OUTPUT_PRICE_PER_M,
+)
 from diff_view import diff_to_html
 from input_normalization import normalize_resume_text
 from models.schemas import ContactFields, ResumeBodyJSON, ReviewJSON
@@ -72,9 +78,6 @@ if st.session_state.libreoffice_available is None:
 # Helpers
 # ---------------------------------------------------------------------------
 
-_INPUT_COST_PER_M = 3.0  # USD per million input tokens (Claude Sonnet 4.6)
-_OUTPUT_COST_PER_M = 15.0  # USD per million output tokens
-
 
 def _resolve_api_key(ui_key: str) -> str:
     return ui_key.strip() or os.environ.get("ANTHROPIC_API_KEY", "")
@@ -110,7 +113,7 @@ def _load_session_file() -> None:
 
 def _estimate_cost(input_tokens: int, output_tokens: int) -> str:
     cost = (
-        input_tokens * _INPUT_COST_PER_M + output_tokens * _OUTPUT_COST_PER_M
+        input_tokens * INPUT_PRICE_PER_M + output_tokens * OUTPUT_PRICE_PER_M
     ) / 1_000_000
     return f"~${cost:.3f}"
 
@@ -182,7 +185,7 @@ def _run_pipeline(
 ) -> tuple[ResumeBodyJSON, ReviewJSON, int, int]:
     label = "Refinement pass" if previous_resume is not None else "Tailoring resume"
 
-    status.write(f"**Step 1 of 2 — {label}** (model: `claude-sonnet-4-6`)")
+    status.write(f"**Step 1 of 2 — {label}** (model: `{MODEL_ID}`)")
     progress_placeholder = status.empty()
 
     def _on_tailor_progress(approx_tokens: int) -> None:
@@ -207,7 +210,7 @@ def _run_pipeline(
         f"{tailor_result.output_tokens:,} out."
     )
 
-    status.write("**Step 2 of 2 — Reviewing resume** (model: `claude-sonnet-4-6`)")
+    status.write(f"**Step 2 of 2 — Reviewing resume** (model: `{MODEL_ID}`)")
     review_result: ReviewResult = review_agent.run(
         resume=tailor_result.resume,
         job_listing=job_listing,
@@ -643,7 +646,8 @@ if st.session_state.resume_body is not None:
     if total_in or total_out:
         st.caption(
             f"Estimated cost: {_estimate_cost(total_in, total_out)}",
-            help="Based on Claude Sonnet 4.6 list pricing ($3/M input, $15/M output). "
+            help=f"Based on {MODEL_DISPLAY_NAME} list pricing "
+            f"(${INPUT_PRICE_PER_M:g}/M input, ${OUTPUT_PRICE_PER_M:g}/M output). "
             "Cumulative across all generation and refinement passes.",
         )
 
