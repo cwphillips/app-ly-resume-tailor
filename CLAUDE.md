@@ -21,7 +21,9 @@ changes in that spirit.
 
 | Path | Responsibility |
 |---|---|
-| `app.py` | Streamlit UI, session state, and pipeline orchestration (the entry point). |
+| `app.py` | Streamlit UI and session state (the app entry point). Wires the UI to `pipeline.py`. |
+| `pipeline.py` | UI-agnostic tailor→review orchestration and token accounting. Shared by `app.py` and `cli.py`; progress is surfaced through a `ProgressReporter` hook, never a `streamlit` import. |
+| `cli.py` | Headless entry point (`uv run python cli.py …`) — runs the same pipeline and writes a DOCX without the browser. |
 | `agents/` | The `tailoring` and `review` agents — prompt building, the Anthropic call, and parsing tool output into schemas. `errors.py` holds shared typed errors. |
 | `models/schemas.py` | Pydantic models for the resume/review payloads **and** the Anthropic tool definitions derived from them. |
 | `exporters/` | `docx.py` renders a resume to a Word document; `converter.py` shells out to LibreOffice for PDF/ODT. |
