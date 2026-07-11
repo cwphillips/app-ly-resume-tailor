@@ -14,6 +14,7 @@ import exporters.converter as converter
 import exporters.docx as docx_exporter
 from agents.review import ReviewResult
 from agents.tailoring import TailoringResult
+from diff_view import diff_to_html
 from input_normalization import normalize_resume_text
 from models.schemas import ContactFields, ResumeBodyJSON, ReviewJSON
 from templates.library import DEFAULT_TEMPLATE, TEMPLATES, Template
@@ -683,30 +684,7 @@ if st.session_state.resume_body is not None:
         )
         if diff_lines:
             with st.expander("What changed in this refinement", expanded=False):
-                html_lines = []
-                for line in diff_lines[2:]:  # skip the --- +++ header lines
-                    if line.startswith("+"):
-                        html_lines.append(
-                            f'<span style="background:#d4edda;color:#155724;display:block">{line}</span>'
-                        )
-                    elif line.startswith("-"):
-                        html_lines.append(
-                            f'<span style="background:#f8d7da;color:#721c24;display:block">{line}</span>'
-                        )
-                    elif line.startswith("@@"):
-                        html_lines.append(
-                            f'<span style="color:#6c757d;display:block">{line}</span>'
-                        )
-                    else:
-                        html_lines.append(
-                            f'<span style="color:#495057;display:block">{line}</span>'
-                        )
-                st.markdown(
-                    '<pre style="font-size:0.8rem;line-height:1.4">'
-                    + "".join(html_lines)
-                    + "</pre>",
-                    unsafe_allow_html=True,
-                )
+                st.markdown(diff_to_html(diff_lines), unsafe_allow_html=True)
 
     res_col, rev_col = st.columns([3, 2])
 
