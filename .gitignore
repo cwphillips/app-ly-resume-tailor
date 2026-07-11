@@ -12,6 +12,7 @@ wheels/
 # Environment / secrets
 .env
 .env.*
+!.env.example
 
 # Streamlit
 .streamlit/

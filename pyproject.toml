@@ -1,7 +1,7 @@
 [project]
-name = "app-ly"
+name = "app-ly-resume-tailor"
 version = "0.1.0"
-description = "Add your description here"
+description = "A locally-hosted AI resume tailoring tool powered by Claude."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

@@ -1,6 +1,6 @@
-# app-ly
+# app-ly — AI resume tailor
 
-A locally-hosted AI resume tailoring tool. Paste your resume (or a skills list) and a job listing; the app produces an ATS-optimised, tailored resume using Claude.
+A locally-hosted AI resume tailoring tool. Paste your resume (or a skills list) and a job listing; the app produces a polished, tailored resume using Claude.
 
 ## Requirements
 
@@ -13,7 +13,7 @@ A locally-hosted AI resume tailoring tool. Paste your resume (or a skills list) 
 
 ```bash
 # Clone / navigate to the project
-cd app-ly
+cd app-ly-resume-tailor
 
 # Install dependencies
 uv sync
@@ -53,7 +53,7 @@ After generation, up to two **refinement passes** are available. Each pass takes
 
 ### AI review
 
-Every generation and refinement pass is automatically followed by a structured review: a 0–100 ATS + hiring-manager score, strengths, concerns, and ranked suggestions. The score delta is shown after each refinement so you can track improvement.
+Every generation and refinement pass is automatically followed by a structured review: a 0–100 keyword-match + hiring-manager score, strengths, concerns, and ranked suggestions. The score delta is shown after each refinement so you can track improvement.
 
 An **estimated cost** (based on Claude Sonnet 4.6 list pricing) is displayed after each run, cumulative across all generation and refinement passes.
 
