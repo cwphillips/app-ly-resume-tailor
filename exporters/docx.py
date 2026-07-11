@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import io
-from collections.abc import Callable
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -9,8 +8,17 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
-from models.schemas import ContactFields, ResumeBodyJSON
-from templates.library import DEFAULT_TEMPLATE, Section, Template
+from models.schemas import (
+    CertificationEntry,
+    ContactFields,
+    EducationEntry,
+    ExperienceEntry,
+    ProjectEntry,
+    ResumeBodyJSON,
+    SkillGroup,
+)
+from resume_sections import walk_sections
+from templates.library import DEFAULT_TEMPLATE, Template
 
 
 def _set_font(
@@ -66,126 +74,107 @@ def _add_contact_line(doc: Document, contact: ContactFields) -> None:
     _set_font(contact_run, size_pt=10)
 
 
-def _render_summary(doc: Document, resume: ResumeBodyJSON, template: Template) -> None:
-    if not resume.summary:
-        return
-    _add_section_header(doc, "Summary")
-    summary_para = doc.add_paragraph()
-    summary_para.paragraph_format.space_after = Pt(4)
-    _set_font(summary_para.add_run(resume.summary), size_pt=11)
+class _DocxVisitor:
+    """Render each resume section into a python-docx Document.
 
+    Ordering, skill-group capping, and optional-section skipping are handled by
+    ``walk_sections`` — this visitor only knows how to lay out a section that it
+    is asked to render.
+    """
 
-def _render_experience(
-    doc: Document, resume: ResumeBodyJSON, template: Template
-) -> None:
-    _add_section_header(doc, "Experience")
-    for entry in resume.experience:
-        header_para = doc.add_paragraph()
-        header_para.paragraph_format.space_before = Pt(4)
-        header_para.paragraph_format.space_after = Pt(0)
-        title_run = header_para.add_run(f"{entry.title}  —  {entry.company}")
-        _set_font(title_run, bold=True, size_pt=11)
-        if entry.location:
-            loc_run = header_para.add_run(f"  |  {entry.location}")
-            _set_font(loc_run, size_pt=10)
+    def __init__(self, doc: Document) -> None:
+        self._doc = doc
 
-        dates_para = doc.add_paragraph()
-        dates_para.paragraph_format.space_after = Pt(1)
-        dates_run = dates_para.add_run(f"{entry.start_date} – {entry.end_date}")
-        _set_font(dates_run, size_pt=10)
-        dates_run.font.color.rgb = RGBColor(0x60, 0x60, 0x60)
+    def summary(self, text: str) -> None:
+        _add_section_header(self._doc, "Summary")
+        summary_para = self._doc.add_paragraph()
+        summary_para.paragraph_format.space_after = Pt(4)
+        _set_font(summary_para.add_run(text), size_pt=11)
 
-        for bullet in entry.bullets:
-            bullet_para = doc.add_paragraph(style="List Bullet")
-            bullet_para.paragraph_format.left_indent = Inches(0.25)
-            bullet_para.paragraph_format.space_after = Pt(1)
-            _set_font(bullet_para.add_run(bullet), size_pt=11)
+    def experience(self, entries: list[ExperienceEntry]) -> None:
+        _add_section_header(self._doc, "Experience")
+        for entry in entries:
+            header_para = self._doc.add_paragraph()
+            header_para.paragraph_format.space_before = Pt(4)
+            header_para.paragraph_format.space_after = Pt(0)
+            title_run = header_para.add_run(f"{entry.title}  —  {entry.company}")
+            _set_font(title_run, bold=True, size_pt=11)
+            if entry.location:
+                loc_run = header_para.add_run(f"  |  {entry.location}")
+                _set_font(loc_run, size_pt=10)
 
+            dates_para = self._doc.add_paragraph()
+            dates_para.paragraph_format.space_after = Pt(1)
+            dates_run = dates_para.add_run(f"{entry.start_date} – {entry.end_date}")
+            _set_font(dates_run, size_pt=10)
+            dates_run.font.color.rgb = RGBColor(0x60, 0x60, 0x60)
 
-def _render_skills(doc: Document, resume: ResumeBodyJSON, template: Template) -> None:
-    groups = resume.skills
-    if template.max_skill_groups is not None:
-        groups = groups[: template.max_skill_groups]
-    skills_line = " | ".join(f"{g.category}: {', '.join(g.skills)}" for g in groups)
-    _add_section_header(doc, "Skills")
-    skills_para = doc.add_paragraph()
-    skills_para.paragraph_format.space_after = Pt(4)
-    _set_font(skills_para.add_run(skills_line), size_pt=11)
+            for bullet in entry.bullets:
+                bullet_para = self._doc.add_paragraph(style="List Bullet")
+                bullet_para.paragraph_format.left_indent = Inches(0.25)
+                bullet_para.paragraph_format.space_after = Pt(1)
+                _set_font(bullet_para.add_run(bullet), size_pt=11)
 
+    def skills(self, groups: list[SkillGroup]) -> None:
+        skills_line = " | ".join(f"{g.category}: {', '.join(g.skills)}" for g in groups)
+        _add_section_header(self._doc, "Skills")
+        skills_para = self._doc.add_paragraph()
+        skills_para.paragraph_format.space_after = Pt(4)
+        _set_font(skills_para.add_run(skills_line), size_pt=11)
 
-def _render_education(
-    doc: Document, resume: ResumeBodyJSON, template: Template
-) -> None:
-    _add_section_header(doc, "Education")
-    for entry in resume.education:
-        edu_para = doc.add_paragraph()
-        edu_para.paragraph_format.space_before = Pt(3)
-        edu_para.paragraph_format.space_after = Pt(1)
-        degree_run = edu_para.add_run(entry.degree)
-        _set_font(degree_run, bold=True, size_pt=11)
-        inst_run = edu_para.add_run(
-            f"  —  {entry.institution}  |  {entry.graduation_date}"
-        )
-        _set_font(inst_run, size_pt=10)
+    def education(self, entries: list[EducationEntry]) -> None:
+        _add_section_header(self._doc, "Education")
+        for entry in entries:
+            edu_para = self._doc.add_paragraph()
+            edu_para.paragraph_format.space_before = Pt(3)
+            edu_para.paragraph_format.space_after = Pt(1)
+            degree_run = edu_para.add_run(entry.degree)
+            _set_font(degree_run, bold=True, size_pt=11)
+            inst_run = edu_para.add_run(
+                f"  —  {entry.institution}  |  {entry.graduation_date}"
+            )
+            _set_font(inst_run, size_pt=10)
 
+    def certifications(self, entries: list[CertificationEntry]) -> None:
+        _add_section_header(self._doc, "Certifications")
+        for entry in entries:
+            cert_para = self._doc.add_paragraph()
+            cert_para.paragraph_format.space_before = Pt(3)
+            cert_para.paragraph_format.space_after = Pt(1)
+            name_run = cert_para.add_run(entry.name)
+            _set_font(name_run, bold=True, size_pt=11)
+            issuer_text = f"  —  {entry.issuer}"
+            if entry.date:
+                issuer_text += f"  |  {entry.date}"
+            issuer_run = cert_para.add_run(issuer_text)
+            _set_font(issuer_run, size_pt=10)
 
-def _render_certifications(
-    doc: Document, resume: ResumeBodyJSON, template: Template
-) -> None:
-    if not resume.certifications:
-        return
-    _add_section_header(doc, "Certifications")
-    for entry in resume.certifications:
-        cert_para = doc.add_paragraph()
-        cert_para.paragraph_format.space_before = Pt(3)
-        cert_para.paragraph_format.space_after = Pt(1)
-        name_run = cert_para.add_run(entry.name)
-        _set_font(name_run, bold=True, size_pt=11)
-        issuer_text = f"  —  {entry.issuer}"
-        if entry.date:
-            issuer_text += f"  |  {entry.date}"
-        issuer_run = cert_para.add_run(issuer_text)
-        _set_font(issuer_run, size_pt=10)
+    def projects(self, entries: list[ProjectEntry]) -> None:
+        _add_section_header(self._doc, "Projects")
+        for entry in entries:
+            header_para = self._doc.add_paragraph()
+            header_para.paragraph_format.space_before = Pt(4)
+            header_para.paragraph_format.space_after = Pt(0)
+            name_run = header_para.add_run(entry.name)
+            _set_font(name_run, bold=True, size_pt=11)
 
+            desc_para = self._doc.add_paragraph()
+            desc_para.paragraph_format.space_after = Pt(1)
+            _set_font(desc_para.add_run(entry.description), size_pt=11)
 
-def _render_projects(doc: Document, resume: ResumeBodyJSON, template: Template) -> None:
-    if not resume.projects:
-        return
-    _add_section_header(doc, "Projects")
-    for entry in resume.projects:
-        header_para = doc.add_paragraph()
-        header_para.paragraph_format.space_before = Pt(4)
-        header_para.paragraph_format.space_after = Pt(0)
-        name_run = header_para.add_run(entry.name)
-        _set_font(name_run, bold=True, size_pt=11)
+            tech_para = self._doc.add_paragraph()
+            tech_para.paragraph_format.space_after = Pt(1)
+            tech_run = tech_para.add_run(
+                f"Technologies: {', '.join(entry.technologies)}"
+            )
+            _set_font(tech_run, size_pt=10)
+            tech_run.font.color.rgb = RGBColor(0x60, 0x60, 0x60)
 
-        desc_para = doc.add_paragraph()
-        desc_para.paragraph_format.space_after = Pt(1)
-        _set_font(desc_para.add_run(entry.description), size_pt=11)
-
-        tech_para = doc.add_paragraph()
-        tech_para.paragraph_format.space_after = Pt(1)
-        tech_run = tech_para.add_run(f"Technologies: {', '.join(entry.technologies)}")
-        _set_font(tech_run, size_pt=10)
-        tech_run.font.color.rgb = RGBColor(0x60, 0x60, 0x60)
-
-        for bullet in entry.bullets:
-            bullet_para = doc.add_paragraph(style="List Bullet")
-            bullet_para.paragraph_format.left_indent = Inches(0.25)
-            bullet_para.paragraph_format.space_after = Pt(1)
-            _set_font(bullet_para.add_run(bullet), size_pt=11)
-
-
-_SECTION_RENDERERS: dict[
-    Section, Callable[[Document, ResumeBodyJSON, Template], None]
-] = {
-    Section.SUMMARY: _render_summary,
-    Section.EXPERIENCE: _render_experience,
-    Section.SKILLS: _render_skills,
-    Section.EDUCATION: _render_education,
-    Section.CERTIFICATIONS: _render_certifications,
-    Section.PROJECTS: _render_projects,
-}
+            for bullet in entry.bullets:
+                bullet_para = self._doc.add_paragraph(style="List Bullet")
+                bullet_para.paragraph_format.left_indent = Inches(0.25)
+                bullet_para.paragraph_format.space_after = Pt(1)
+                _set_font(bullet_para.add_run(bullet), size_pt=11)
 
 
 def render(
@@ -214,11 +203,8 @@ def render(
     # --- Contact block (PII injected here) ---
     _add_contact_line(doc, contact)
 
-    # --- Sections in template order ---
-    for section in template.sections:
-        renderer = _SECTION_RENDERERS.get(section)
-        if renderer is not None:
-            renderer(doc, resume, template)
+    # --- Sections in template order (traversal + capping shared) ---
+    walk_sections(resume, template, _DocxVisitor(doc))
 
     buf = io.BytesIO()
     doc.save(buf)
