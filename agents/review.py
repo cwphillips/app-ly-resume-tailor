@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import anthropic
 
-from models.schemas import ResumeBodyJSON, ReviewJSON, REVIEW_TOOL
+from models.schemas import REVIEW_TOOL, ResumeBodyJSON, ReviewJSON
 
 
 @dataclass
@@ -12,6 +12,7 @@ class ReviewResult:
     review: ReviewJSON
     input_tokens: int
     output_tokens: int
+
 
 MODEL = "claude-sonnet-4-6"
 
@@ -64,7 +65,9 @@ def run(
         parts.append(f"## Target Role\n{target_role.strip()}")
 
     if page_limit is not None:
-        parts.append(f"## Page Limit\nThe resume is intended to fit on {page_limit} page(s).")
+        parts.append(
+            f"## Page Limit\nThe resume is intended to fit on {page_limit} page(s)."
+        )
 
     prompt = "\n\n".join(parts)
 
@@ -77,9 +80,7 @@ def run(
         messages=[{"role": "user", "content": prompt}],
     )
 
-    tool_use_block = next(
-        (b for b in response.content if b.type == "tool_use"), None
-    )
+    tool_use_block = next((b for b in response.content if b.type == "tool_use"), None)
     if tool_use_block is None:
         raise RuntimeError(
             "ReviewAgent: the model did not return a tool_use block. "

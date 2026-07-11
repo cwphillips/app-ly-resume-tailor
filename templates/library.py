@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class Section(str, Enum):
+class Section(StrEnum):
     SUMMARY = "summary"
     EXPERIENCE = "experience"
     SKILLS = "skills"

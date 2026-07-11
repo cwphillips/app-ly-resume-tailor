@@ -1,6 +1,5 @@
 import io
 
-import pytest
 from docx import Document
 
 from exporters.docx import render
@@ -13,7 +12,7 @@ from models.schemas import (
     ResumeBodyJSON,
     SkillGroup,
 )
-from templates.library import DEFAULT_TEMPLATE, TEMPLATES, Template, Section
+from templates.library import TEMPLATES, Section, Template
 
 
 def _make_resume(**overrides) -> ResumeBodyJSON:
@@ -60,6 +59,7 @@ def _full_text(doc: Document) -> str:
 # Output validity
 # ---------------------------------------------------------------------------
 
+
 def test_render_returns_bytes():
     result = render(_make_resume(), _make_contact())
     assert isinstance(result, bytes)
@@ -75,6 +75,7 @@ def test_render_produces_valid_docx():
 # ---------------------------------------------------------------------------
 # Contact fields appear in output
 # ---------------------------------------------------------------------------
+
 
 def test_contact_name_in_docx():
     contact = _make_contact(name="Alice Wonderland", email="alice@example.com")
@@ -107,6 +108,7 @@ def test_optional_contact_fields_in_docx():
 # Resume content appears in output
 # ---------------------------------------------------------------------------
 
+
 def test_summary_in_docx():
     resume = _make_resume(summary="Unique summary text for testing.")
     doc = Document(io.BytesIO(render(resume, _make_contact())))
@@ -134,15 +136,21 @@ def test_education_in_docx():
 # Rationale must NOT appear in the rendered document
 # ---------------------------------------------------------------------------
 
+
 def test_rationale_absent_from_docx():
-    resume = _make_resume(rationale="This rationale should never appear in the DOCX output.")
+    resume = _make_resume(
+        rationale="This rationale should never appear in the DOCX output."
+    )
     doc = Document(io.BytesIO(render(resume, _make_contact())))
-    assert "This rationale should never appear in the DOCX output." not in _full_text(doc)
+    assert "This rationale should never appear in the DOCX output." not in _full_text(
+        doc
+    )
 
 
 # ---------------------------------------------------------------------------
 # Grouped skills rendering
 # ---------------------------------------------------------------------------
+
 
 def test_skills_rendered_with_category_labels():
     doc = Document(io.BytesIO(render(_make_resume(), _make_contact())))
@@ -159,14 +167,13 @@ def test_skills_rendered_as_pipe_separated_groups():
 
 def test_max_skill_groups_cap_respected():
     many_groups = [
-        SkillGroup(category=f"Cat{i}", skills=[f"skill{i}"])
-        for i in range(10)
+        SkillGroup(category=f"Cat{i}", skills=[f"skill{i}"]) for i in range(10)
     ]
     resume = _make_resume(skills=many_groups)
     # standard template has max_skill_groups=5
     doc = Document(io.BytesIO(render(resume, _make_contact(), TEMPLATES["standard"])))
     text = _full_text(doc)
-    assert "Cat4:" in text   # 5th group (index 4) present
+    assert "Cat4:" in text  # 5th group (index 4) present
     assert "Cat5:" not in text  # 6th group absent
 
 
@@ -184,7 +191,9 @@ _CERTS_TEMPLATE = Template(
 
 def test_certifications_rendered_when_present():
     resume = _make_resume(
-        certifications=[CertificationEntry(name="AWS SAA", issuer="Amazon", date="Jun 2023")]
+        certifications=[
+            CertificationEntry(name="AWS SAA", issuer="Amazon", date="Jun 2023")
+        ]
     )
     doc = Document(io.BytesIO(render(resume, _make_contact(), _CERTS_TEMPLATE)))
     text = _full_text(doc)
@@ -206,6 +215,7 @@ def test_certification_no_date_renders_without_pipe():
 # ---------------------------------------------------------------------------
 # Projects renderer
 # ---------------------------------------------------------------------------
+
 
 def test_projects_rendered_when_present():
     resume = _make_resume(
@@ -229,6 +239,7 @@ def test_projects_rendered_when_present():
 # None sections silently skipped
 # ---------------------------------------------------------------------------
 
+
 def test_none_certifications_silently_skipped():
     resume = _make_resume(certifications=None)
     technical = TEMPLATES["technical"]
@@ -248,6 +259,7 @@ def test_none_projects_silently_skipped():
 # ---------------------------------------------------------------------------
 # Template section order
 # ---------------------------------------------------------------------------
+
 
 def test_template_section_order_respected():
     """Technical template puts Skills before Experience."""

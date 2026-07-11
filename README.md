@@ -1,5 +1,7 @@
 # app-ly — AI resume tailor
 
+[![CI](https://github.com/cwphillips/app-ly-resume-tailor/actions/workflows/ci.yml/badge.svg)](https://github.com/cwphillips/app-ly-resume-tailor/actions/workflows/ci.yml)
+
 A locally-hosted AI resume tailoring tool. Paste your resume (or a skills list) and a job listing; the app produces a polished, tailored resume using Claude.
 
 ## Requirements

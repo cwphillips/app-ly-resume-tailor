@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import anthropic
 
-from models.schemas import ResumeBodyJSON, ReviewJSON, TAILORING_TOOL
+from models.schemas import TAILORING_TOOL, ResumeBodyJSON, ReviewJSON
 
 
 @dataclass
@@ -13,6 +13,7 @@ class TailoringResult:
     resume: ResumeBodyJSON
     input_tokens: int
     output_tokens: int
+
 
 MODEL = "claude-sonnet-4-6"
 
@@ -86,12 +87,16 @@ def run(
             "You are refining a previously tailored resume based on reviewer feedback.\n"
             "Address every concern and act on every suggestion listed below.\n"
         )
-        parts.append(f"### Previous Resume (JSON)\n```json\n{previous_resume.model_dump_json(indent=2)}\n```")
+        parts.append(
+            f"### Previous Resume (JSON)\n```json\n{previous_resume.model_dump_json(indent=2)}\n```"
+        )
         parts.append(
             f"### Reviewer Feedback\n"
             f"Score: {review_feedback.score}/100\n"
-            f"Concerns:\n" + "\n".join(f"- {c}" for c in review_feedback.concerns) + "\n"
-            f"Suggestions:\n" + "\n".join(f"- {s}" for s in review_feedback.suggestions)
+            f"Concerns:\n"
+            + "\n".join(f"- {c}" for c in review_feedback.concerns)
+            + "\n"
+            "Suggestions:\n" + "\n".join(f"- {s}" for s in review_feedback.suggestions)
         )
         parts.append("---")
 
@@ -149,9 +154,7 @@ def run(
                     progress_callback(max(1, json_chars // 4))
         response = stream.get_final_message()
 
-    tool_use_block = next(
-        (b for b in response.content if b.type == "tool_use"), None
-    )
+    tool_use_block = next((b for b in response.content if b.type == "tool_use"), None)
     if tool_use_block is None:
         raise RuntimeError(
             "TailoringAgent: the model did not return a tool_use block. "

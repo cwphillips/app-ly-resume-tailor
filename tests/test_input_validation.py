@@ -7,12 +7,15 @@ make any API calls.
 """
 
 import inspect
-import textwrap
 
-import pytest
-
-from models.schemas import ContactFields, ExperienceEntry, EducationEntry, ResumeBodyJSON, ReviewJSON, SkillGroup
-
+from models.schemas import (
+    ContactFields,
+    EducationEntry,
+    ExperienceEntry,
+    ResumeBodyJSON,
+    ReviewJSON,
+    SkillGroup,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -45,7 +48,11 @@ def _make_resume() -> ResumeBodyJSON:
             )
         ],
         skills=[SkillGroup(category="Languages", skills=["Python"])],
-        education=[EducationEntry(degree="B.S.", institution="University", graduation_date="2019")],
+        education=[
+            EducationEntry(
+                degree="B.S.", institution="University", graduation_date="2019"
+            )
+        ],
     )
 
 
@@ -83,8 +90,10 @@ def _build_tailoring_prompt(
         parts.append(
             f"### Reviewer Feedback\n"
             f"Score: {review_feedback.score}/100\n"
-            f"Concerns:\n" + "\n".join(f"- {c}" for c in review_feedback.concerns) + "\n"
-            f"Suggestions:\n" + "\n".join(f"- {s}" for s in review_feedback.suggestions)
+            f"Concerns:\n"
+            + "\n".join(f"- {c}" for c in review_feedback.concerns)
+            + "\n"
+            "Suggestions:\n" + "\n".join(f"- {s}" for s in review_feedback.suggestions)
         )
         parts.append("---")
 
@@ -133,7 +142,9 @@ def _build_review_prompt(
         parts.append(f"## Target Role\n{target_role.strip()}")
 
     if page_limit is not None:
-        parts.append(f"## Page Limit\nThe resume is intended to fit on {page_limit} page(s).")
+        parts.append(
+            f"## Page Limit\nThe resume is intended to fit on {page_limit} page(s)."
+        )
 
     return "\n\n".join(parts)
 
@@ -148,6 +159,7 @@ def _assert_no_pii(text: str) -> None:
 # ---------------------------------------------------------------------------
 # TailoringAgent prompt — PII must not appear
 # ---------------------------------------------------------------------------
+
 
 def test_tailoring_prompt_no_pii_initial():
     prompt = _build_tailoring_prompt(
@@ -189,6 +201,7 @@ def test_tailoring_prompt_no_pii_with_page_limit():
 # ReviewAgent prompt — PII must not appear
 # ---------------------------------------------------------------------------
 
+
 def test_review_prompt_no_pii_basic():
     prompt = _build_review_prompt(
         resume=_make_resume(),
@@ -210,8 +223,10 @@ def test_review_prompt_no_pii_with_target_role():
 # Confirm ContactFields is not a parameter of agent run() functions
 # ---------------------------------------------------------------------------
 
+
 def test_tailoring_agent_run_has_no_contact_parameter():
     import agents.tailoring as mod
+
     sig = inspect.signature(mod.run)
     assert "contact" not in sig.parameters, (
         "TailoringAgent.run() must not accept a 'contact' parameter."
@@ -220,6 +235,7 @@ def test_tailoring_agent_run_has_no_contact_parameter():
 
 def test_review_agent_run_has_no_contact_parameter():
     import agents.review as mod
+
     sig = inspect.signature(mod.run)
     assert "contact" not in sig.parameters, (
         "ReviewAgent.run() must not accept a 'contact' parameter."
@@ -229,6 +245,7 @@ def test_review_agent_run_has_no_contact_parameter():
 # ---------------------------------------------------------------------------
 # allow_reword and include_summary prompt constraints
 # ---------------------------------------------------------------------------
+
 
 def test_verbatim_constraint_present_when_reword_disabled():
     prompt = _build_tailoring_prompt(
