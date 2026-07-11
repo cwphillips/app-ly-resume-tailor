@@ -6,6 +6,7 @@ import anthropic
 from pydantic import ValidationError
 
 from agents.errors import MalformedModelOutputError
+from config import MODEL_ID
 from models.schemas import REVIEW_TOOL, ResumeBodyJSON, ReviewJSON
 
 
@@ -14,9 +15,6 @@ class ReviewResult:
     review: ReviewJSON
     input_tokens: int
     output_tokens: int
-
-
-MODEL = "claude-sonnet-4-6"
 
 
 def _parse_review(tool_input: dict) -> ReviewJSON:
@@ -87,7 +85,7 @@ def run(
     prompt = "\n\n".join(parts)
 
     response = client.messages.create(
-        model=MODEL,
+        model=MODEL_ID,
         max_tokens=768,
         system=SYSTEM_PROMPT,
         tools=[REVIEW_TOOL],

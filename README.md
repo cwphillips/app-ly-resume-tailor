@@ -59,6 +59,8 @@ Every generation and refinement pass is automatically followed by a structured r
 
 An **estimated cost** (based on Claude Sonnet 4.6 list pricing) is displayed after each run, cumulative across all generation and refinement passes.
 
+> The model ID and per-token pricing live in [`config.py`](config.py) — update them there if the model or its list price changes.
+
 ### Resume sections
 
 The app supports the following resume sections. Optional sections are only included when the source material contains relevant content:
