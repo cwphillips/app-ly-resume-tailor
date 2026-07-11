@@ -7,7 +7,7 @@ import anthropic
 from pydantic import ValidationError
 
 from agents.errors import MalformedModelOutputError
-from config import MODEL_ID
+from config import MAX_API_RETRIES, MODEL_ID
 from models.schemas import TAILORING_TOOL, ResumeBodyJSON, ReviewJSON
 
 
@@ -90,7 +90,7 @@ def run(
 
     Contact fields must NOT be passed to this function — they are injected at render time only.
     """
-    client = anthropic.Anthropic(api_key=api_key, max_retries=2)
+    client = anthropic.Anthropic(api_key=api_key, max_retries=MAX_API_RETRIES)
 
     parts: list[str] = []
 

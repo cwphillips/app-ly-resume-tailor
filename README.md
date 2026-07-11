@@ -34,6 +34,19 @@ uv run streamlit run app.py --server.address 0.0.0.0 --server.port 8501
 ```
 Then open `http://<your-machine-ip>:8501` in any browser on the same network.
 
+## Running with Docker
+
+A [`Dockerfile`](Dockerfile) is included for self-hosting the Streamlit app:
+
+```bash
+docker build -t app-ly .
+docker run --rm -p 8501:8501 -e ANTHROPIC_API_KEY="sk-ant-..." app-ly
+```
+
+Then open `http://localhost:8501`. The API key is read from the environment, so it never gets baked into the image.
+
+PDF/ODT export needs LibreOffice, which is a large layer and is **not** installed by default — uncomment the `apt-get` block in the `Dockerfile` and rebuild if you need it.
+
 ## API key
 
 The app reads your Anthropic API key from the `ANTHROPIC_API_KEY` environment variable:

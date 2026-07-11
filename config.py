@@ -17,3 +17,9 @@ MODEL_DISPLAY_NAME = "Claude Sonnet 4.6"
 # List pricing, in USD per million tokens.
 INPUT_PRICE_PER_M = 3.0
 OUTPUT_PRICE_PER_M = 15.0
+
+# How many times the Anthropic SDK retries a transient failure (rate limits,
+# 5xx, connection errors) before giving up. The SDK applies exponential backoff
+# between attempts on its own; this only sets the attempt count. On final
+# failure the agents raise, and the UI/CLI surface a friendly message.
+MAX_API_RETRIES = 4
