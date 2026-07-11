@@ -3,23 +3,22 @@ from __future__ import annotations
 import difflib
 import json
 import os
-from typing import Optional
 
 import anthropic
 import streamlit as st
 from dotenv import load_dotenv
 
-load_dotenv()
-
-import agents.tailoring as tailoring_agent
 import agents.review as review_agent
-import exporters.docx as docx_exporter
+import agents.tailoring as tailoring_agent
 import exporters.converter as converter
-
-from agents.tailoring import TailoringResult
+import exporters.docx as docx_exporter
 from agents.review import ReviewResult
+from agents.tailoring import TailoringResult
 from models.schemas import ContactFields, ResumeBodyJSON, ReviewJSON
-from templates.library import TEMPLATES, DEFAULT_TEMPLATE, Template
+from templates.library import DEFAULT_TEMPLATE, TEMPLATES, Template
+
+# Load environment variables (e.g. ANTHROPIC_API_KEY) before any runtime use.
+load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -70,7 +69,7 @@ if st.session_state.libreoffice_available is None:
 # Helpers
 # ---------------------------------------------------------------------------
 
-_INPUT_COST_PER_M = 3.0   # USD per million input tokens (Claude Sonnet 4.6)
+_INPUT_COST_PER_M = 3.0  # USD per million input tokens (Claude Sonnet 4.6)
 _OUTPUT_COST_PER_M = 15.0  # USD per million output tokens
 
 
@@ -93,20 +92,30 @@ def _load_session_file() -> None:
         st.session_state.ss_job_listing = data.get("job_listing", "")
         st.session_state.ss_target_role = data.get("target_role", "")
         contact = data.get("contact", {})
-        for field in ("ss_name", "ss_email", "ss_phone", "ss_location", "ss_linkedin", "ss_github"):
+        for field in (
+            "ss_name",
+            "ss_email",
+            "ss_phone",
+            "ss_location",
+            "ss_linkedin",
+            "ss_github",
+        ):
             st.session_state[field] = contact.get(field[3:], "")
     except Exception:
         st.session_state["_session_load_error"] = True
 
 
 def _estimate_cost(input_tokens: int, output_tokens: int) -> str:
-    cost = (input_tokens * _INPUT_COST_PER_M + output_tokens * _OUTPUT_COST_PER_M) / 1_000_000
+    cost = (
+        input_tokens * _INPUT_COST_PER_M + output_tokens * _OUTPUT_COST_PER_M
+    ) / 1_000_000
     return f"~${cost:.3f}"
 
 
 def _resume_to_markdown(resume: ResumeBodyJSON, template: Template) -> str:
     """Return a plain-text markdown representation of the resume for diffing."""
     from templates.library import Section
+
     lines: list[str] = []
     for section in template.sections:
         if section == Section.SUMMARY and resume.summary:
@@ -160,13 +169,13 @@ def _run_pipeline(
     resume_text: str,
     job_listing: str,
     target_role: str,
-    page_limit: Optional[int],
+    page_limit: int | None,
     allow_reword: bool,
     include_summary: bool,
-    max_skill_groups: Optional[int] = None,
+    max_skill_groups: int | None = None,
     status,  # st.status container
-    previous_resume: Optional[ResumeBodyJSON] = None,
-    review_feedback: Optional[ReviewJSON] = None,
+    previous_resume: ResumeBodyJSON | None = None,
+    review_feedback: ReviewJSON | None = None,
 ) -> tuple[ResumeBodyJSON, ReviewJSON, int, int]:
     label = "Refinement pass" if previous_resume is not None else "Tailoring resume"
 
@@ -245,7 +254,9 @@ def _render_resume_preview(resume: ResumeBodyJSON, template: Template) -> None:
         elif section == Section.EDUCATION:
             st.markdown("**Education**")
             for edu in resume.education:
-                st.markdown(f"**{edu.degree}** — {edu.institution} | {edu.graduation_date}")
+                st.markdown(
+                    f"**{edu.degree}** — {edu.institution} | {edu.graduation_date}"
+                )
 
         elif section == Section.CERTIFICATIONS and resume.certifications:
             st.markdown("**Certifications**")
@@ -268,7 +279,7 @@ def _render_resume_preview(resume: ResumeBodyJSON, template: Template) -> None:
         st.write(resume.rationale)
 
 
-def _render_review_panel(review: ReviewJSON, previous_score: Optional[int] = None) -> None:
+def _render_review_panel(review: ReviewJSON, previous_score: int | None = None) -> None:
     st.subheader("Review")
 
     score_display = f"**Score: {review.score}/100**"
@@ -359,11 +370,21 @@ with st.sidebar:
     st.caption("Never sent to the AI — injected into your document locally.")
 
     contact_name = st.text_input("Full Name *", placeholder="Jane Smith", key="ss_name")
-    contact_email = st.text_input("Email *", placeholder="jane@example.com", key="ss_email")
-    contact_phone = st.text_input("Phone", placeholder="+1 555 123 4567", key="ss_phone")
-    contact_location = st.text_input("Location", placeholder="San Francisco, CA", key="ss_location")
-    contact_linkedin = st.text_input("LinkedIn URL", placeholder="linkedin.com/in/janesmith", key="ss_linkedin")
-    contact_github = st.text_input("GitHub URL", placeholder="github.com/janesmith", key="ss_github")
+    contact_email = st.text_input(
+        "Email *", placeholder="jane@example.com", key="ss_email"
+    )
+    contact_phone = st.text_input(
+        "Phone", placeholder="+1 555 123 4567", key="ss_phone"
+    )
+    contact_location = st.text_input(
+        "Location", placeholder="San Francisco, CA", key="ss_location"
+    )
+    contact_linkedin = st.text_input(
+        "LinkedIn URL", placeholder="linkedin.com/in/janesmith", key="ss_linkedin"
+    )
+    contact_github = st.text_input(
+        "GitHub URL", placeholder="github.com/janesmith", key="ss_github"
+    )
 
     st.divider()
     st.subheader("Session")
@@ -379,20 +400,28 @@ with st.sidebar:
         st.error("Could not parse session file.")
         del st.session_state["_session_load_error"]
 
-    session_data = json.dumps({
-        "resume_text": st.session_state.get("ss_resume_text", ""),
-        "job_listing": st.session_state.get("ss_job_listing", ""),
-        "target_role": st.session_state.get("ss_target_role", ""),
-        "contact": {
-            "name": st.session_state.get("ss_name", ""),
-            "email": st.session_state.get("ss_email", ""),
-            "phone": st.session_state.get("ss_phone", ""),
-            "location": st.session_state.get("ss_location", ""),
-            "linkedin": st.session_state.get("ss_linkedin", ""),
-            "github": st.session_state.get("ss_github", ""),
+    session_data = json.dumps(
+        {
+            "resume_text": st.session_state.get("ss_resume_text", ""),
+            "job_listing": st.session_state.get("ss_job_listing", ""),
+            "target_role": st.session_state.get("ss_target_role", ""),
+            "contact": {
+                "name": st.session_state.get("ss_name", ""),
+                "email": st.session_state.get("ss_email", ""),
+                "phone": st.session_state.get("ss_phone", ""),
+                "location": st.session_state.get("ss_location", ""),
+                "linkedin": st.session_state.get("ss_linkedin", ""),
+                "github": st.session_state.get("ss_github", ""),
+            },
         },
-    }, indent=2).encode()
-    st.download_button("Save inputs", data=session_data, file_name="apply_session.json", mime="application/json")
+        indent=2,
+    ).encode()
+    st.download_button(
+        "Save inputs",
+        data=session_data,
+        file_name="apply_session.json",
+        mime="application/json",
+    )
 
     st.divider()
     st.subheader("Settings")
@@ -408,9 +437,11 @@ with st.sidebar:
         key="ss_target_role",
     )
     page_limit_enabled = st.checkbox("Enforce page limit")
-    page_limit: Optional[int] = None
+    page_limit: int | None = None
     if page_limit_enabled:
-        page_limit = st.number_input("Page limit", min_value=1, max_value=4, value=1, step=1)
+        page_limit = st.number_input(
+            "Page limit", min_value=1, max_value=4, value=1, step=1
+        )
 
     allow_reword = st.checkbox("Allow rewording", value=True)
     include_summary = st.checkbox("Include summary", value=True)
@@ -467,9 +498,13 @@ generate_disabled = bool(missing) or st.session_state.running
 if missing and not st.session_state.running:
     st.warning("To generate, please fill in: " + ", ".join(missing) + ".")
 
-generate_label = "Generating..." if st.session_state.running else "Generate Tailored Resume"
+generate_label = (
+    "Generating..." if st.session_state.running else "Generate Tailored Resume"
+)
 
-if st.button(generate_label, type="primary", disabled=generate_disabled, use_container_width=True):
+if st.button(
+    generate_label, type="primary", disabled=generate_disabled, use_container_width=True
+):
     st.session_state.running = True
     st.session_state.resume_body = None
     st.session_state.review = None
@@ -526,8 +561,7 @@ if (
     and not st.session_state.running
 ):
     refine_label = (
-        f"Refine Resume "
-        f"({st.session_state.refinement_count + 1} of {MAX_REFINEMENTS})"
+        f"Refine Resume ({st.session_state.refinement_count + 1} of {MAX_REFINEMENTS})"
     )
     if st.button(refine_label, use_container_width=True):
         st.session_state.running = True
@@ -582,7 +616,9 @@ if (
         st.rerun()
 
 if st.session_state.refinement_count >= MAX_REFINEMENTS:
-    st.info("Maximum refinements reached. Click 'Generate' to start over with a fresh run.")
+    st.info(
+        "Maximum refinements reached. Click 'Generate' to start over with a fresh run."
+    )
 
 # ---------------------------------------------------------------------------
 # Results
@@ -596,7 +632,7 @@ if st.session_state.resume_body is not None:
         st.caption(
             f"Estimated cost: {_estimate_cost(total_in, total_out)}",
             help="Based on Claude Sonnet 4.6 list pricing ($3/M input, $15/M output). "
-                 "Cumulative across all generation and refinement passes.",
+            "Cumulative across all generation and refinement passes.",
         )
 
     # Skipped sections callout
@@ -626,14 +662,19 @@ if st.session_state.resume_body is not None:
     selected_template = TEMPLATES[st.session_state.selected_template_id]
 
     # Refinement diff view
-    if st.session_state.previous_resume_md is not None and st.session_state.resume_body is not None:
+    if (
+        st.session_state.previous_resume_md is not None
+        and st.session_state.resume_body is not None
+    ):
         new_md = _resume_to_markdown(st.session_state.resume_body, selected_template)
-        diff_lines = list(difflib.unified_diff(
-            st.session_state.previous_resume_md.splitlines(),
-            new_md.splitlines(),
-            lineterm="",
-            n=1,
-        ))
+        diff_lines = list(
+            difflib.unified_diff(
+                st.session_state.previous_resume_md.splitlines(),
+                new_md.splitlines(),
+                lineterm="",
+                n=1,
+            )
+        )
         if diff_lines:
             with st.expander("What changed in this refinement", expanded=False):
                 html_lines = []
@@ -655,7 +696,9 @@ if st.session_state.resume_body is not None:
                             f'<span style="color:#495057;display:block">{line}</span>'
                         )
                 st.markdown(
-                    '<pre style="font-size:0.8rem;line-height:1.4">' + "".join(html_lines) + "</pre>",
+                    '<pre style="font-size:0.8rem;line-height:1.4">'
+                    + "".join(html_lines)
+                    + "</pre>",
                     unsafe_allow_html=True,
                 )
 

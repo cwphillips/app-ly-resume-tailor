@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from typing import Optional
-from pydantic import BaseModel, Field
 from anthropic.types import ToolParam
+from pydantic import BaseModel, Field
 
 
 class SkillGroup(BaseModel):
@@ -15,9 +14,13 @@ class SkillGroup(BaseModel):
 class ExperienceEntry(BaseModel):
     title: str
     company: str
-    location: Optional[str] = None
-    start_date: str = Field(description="'MMM YYYY' format (e.g. 'Jan 2022'). Use 'Present' for current roles.")
-    end_date: str = Field(description="'MMM YYYY' format (e.g. 'Jan 2022'). Use 'Present' for current roles.")
+    location: str | None = None
+    start_date: str = Field(
+        description="'MMM YYYY' format (e.g. 'Jan 2022'). Use 'Present' for current roles."
+    )
+    end_date: str = Field(
+        description="'MMM YYYY' format (e.g. 'Jan 2022'). Use 'Present' for current roles."
+    )
     bullets: list[str] = Field(min_length=1)
 
 
@@ -30,7 +33,7 @@ class EducationEntry(BaseModel):
 class CertificationEntry(BaseModel):
     name: str
     issuer: str
-    date: Optional[str] = Field(
+    date: str | None = Field(
         default=None,
         description="'MMM YYYY' format (e.g. 'Jun 2023'), or null if unknown.",
     )
@@ -38,17 +41,23 @@ class CertificationEntry(BaseModel):
 
 class ProjectEntry(BaseModel):
     name: str
-    description: str = Field(description="One sentence describing the project and its purpose.")
-    technologies: list[str] = Field(description="Technologies, languages, and tools used.")
+    description: str = Field(
+        description="One sentence describing the project and its purpose."
+    )
+    technologies: list[str] = Field(
+        description="Technologies, languages, and tools used."
+    )
     bullets: list[str] = Field(
         min_length=1,
         description="Achievement-focused bullets. Use action verbs, past tense.",
     )
-    url: Optional[str] = Field(default=None, description="Project URL or repo link, if public.")
+    url: str | None = Field(
+        default=None, description="Project URL or repo link, if public."
+    )
 
 
 class ResumeBodyJSON(BaseModel):
-    summary: Optional[str] = Field(
+    summary: str | None = Field(
         default=None,
         description=(
             "A concise professional summary (2-4 sentences). "
@@ -70,8 +79,8 @@ class ResumeBodyJSON(BaseModel):
         min_length=1,
     )
     education: list[EducationEntry]
-    certifications: Optional[list[CertificationEntry]] = None
-    projects: Optional[list[ProjectEntry]] = None
+    certifications: list[CertificationEntry] | None = None
+    projects: list[ProjectEntry] | None = None
     skipped_sections: list[str] = Field(
         default_factory=list,
         description=(
@@ -82,7 +91,11 @@ class ResumeBodyJSON(BaseModel):
 
 
 class ReviewJSON(BaseModel):
-    score: int = Field(ge=0, le=100, description="Overall keyword-match + hiring-manager score (0-100).")
+    score: int = Field(
+        ge=0,
+        le=100,
+        description="Overall keyword-match + hiring-manager score (0-100).",
+    )
     strengths: list[str] = Field(
         description="What the resume does well. Max 3 items. Each item: one sentence, ≤25 words."
     )
@@ -97,10 +110,10 @@ class ReviewJSON(BaseModel):
 class ContactFields(BaseModel):
     name: str
     email: str
-    phone: Optional[str] = None
-    location: Optional[str] = None
-    linkedin: Optional[str] = None
-    github: Optional[str] = None
+    phone: str | None = None
+    location: str | None = None
+    linkedin: str | None = None
+    github: str | None = None
 
 
 # ---------------------------------------------------------------------------

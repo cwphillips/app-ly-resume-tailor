@@ -1,19 +1,21 @@
 from __future__ import annotations
 
 import io
-from typing import Callable
+from collections.abc import Callable
 
 from docx import Document
-from docx.shared import Pt, Inches, RGBColor
-from docx.oxml.ns import qn
-from docx.oxml import OxmlElement
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Inches, Pt, RGBColor
 
-from models.schemas import ResumeBodyJSON, ContactFields
-from templates.library import Section, Template, DEFAULT_TEMPLATE
+from models.schemas import ContactFields, ResumeBodyJSON
+from templates.library import DEFAULT_TEMPLATE, Section, Template
 
 
-def _set_font(run, name: str = "Calibri", size_pt: float = 11, bold: bool = False) -> None:
+def _set_font(
+    run, name: str = "Calibri", size_pt: float = 11, bold: bool = False
+) -> None:
     run.font.name = name
     run.font.size = Pt(size_pt)
     run.font.bold = bold
@@ -73,7 +75,9 @@ def _render_summary(doc: Document, resume: ResumeBodyJSON, template: Template) -
     _set_font(summary_para.add_run(resume.summary), size_pt=11)
 
 
-def _render_experience(doc: Document, resume: ResumeBodyJSON, template: Template) -> None:
+def _render_experience(
+    doc: Document, resume: ResumeBodyJSON, template: Template
+) -> None:
     _add_section_header(doc, "Experience")
     for entry in resume.experience:
         header_para = doc.add_paragraph()
@@ -102,16 +106,16 @@ def _render_skills(doc: Document, resume: ResumeBodyJSON, template: Template) ->
     groups = resume.skills
     if template.max_skill_groups is not None:
         groups = groups[: template.max_skill_groups]
-    skills_line = " | ".join(
-        f"{g.category}: {', '.join(g.skills)}" for g in groups
-    )
+    skills_line = " | ".join(f"{g.category}: {', '.join(g.skills)}" for g in groups)
     _add_section_header(doc, "Skills")
     skills_para = doc.add_paragraph()
     skills_para.paragraph_format.space_after = Pt(4)
     _set_font(skills_para.add_run(skills_line), size_pt=11)
 
 
-def _render_education(doc: Document, resume: ResumeBodyJSON, template: Template) -> None:
+def _render_education(
+    doc: Document, resume: ResumeBodyJSON, template: Template
+) -> None:
     _add_section_header(doc, "Education")
     for entry in resume.education:
         edu_para = doc.add_paragraph()
@@ -119,11 +123,15 @@ def _render_education(doc: Document, resume: ResumeBodyJSON, template: Template)
         edu_para.paragraph_format.space_after = Pt(1)
         degree_run = edu_para.add_run(entry.degree)
         _set_font(degree_run, bold=True, size_pt=11)
-        inst_run = edu_para.add_run(f"  —  {entry.institution}  |  {entry.graduation_date}")
+        inst_run = edu_para.add_run(
+            f"  —  {entry.institution}  |  {entry.graduation_date}"
+        )
         _set_font(inst_run, size_pt=10)
 
 
-def _render_certifications(doc: Document, resume: ResumeBodyJSON, template: Template) -> None:
+def _render_certifications(
+    doc: Document, resume: ResumeBodyJSON, template: Template
+) -> None:
     if not resume.certifications:
         return
     _add_section_header(doc, "Certifications")
@@ -168,7 +176,9 @@ def _render_projects(doc: Document, resume: ResumeBodyJSON, template: Template) 
             _set_font(bullet_para.add_run(bullet), size_pt=11)
 
 
-_SECTION_RENDERERS: dict[Section, Callable[[Document, ResumeBodyJSON, Template], None]] = {
+_SECTION_RENDERERS: dict[
+    Section, Callable[[Document, ResumeBodyJSON, Template], None]
+] = {
     Section.SUMMARY: _render_summary,
     Section.EXPERIENCE: _render_experience,
     Section.SKILLS: _render_skills,

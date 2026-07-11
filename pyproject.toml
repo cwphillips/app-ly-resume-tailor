@@ -15,4 +15,21 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "ruff>=0.14",
 ]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+]
+# The formatter owns line length; it intentionally leaves long strings,
+# comments, and URLs unwrapped, so E501 is left to the formatter.
+ignore = ["E501"]

@@ -2,22 +2,20 @@ import pytest
 from pydantic import ValidationError
 
 from models.schemas import (
+    REVIEW_TOOL,
+    TAILORING_TOOL,
     CertificationEntry,
     ContactFields,
-    EducationEntry,
-    ExperienceEntry,
     ProjectEntry,
-    ReviewJSON,
     ResumeBodyJSON,
+    ReviewJSON,
     SkillGroup,
-    TAILORING_TOOL,
-    REVIEW_TOOL,
 )
-
 
 # ---------------------------------------------------------------------------
 # ResumeBodyJSON
 # ---------------------------------------------------------------------------
+
 
 def _valid_resume() -> dict:
     return {
@@ -95,6 +93,7 @@ def test_resume_body_has_rationale():
 # SkillGroup
 # ---------------------------------------------------------------------------
 
+
 def test_skill_group_valid():
     group = SkillGroup(category="Languages", skills=["Python", "SQL"])
     assert group.category == "Languages"
@@ -110,6 +109,7 @@ def test_skill_group_empty_skills_rejected():
 # CertificationEntry
 # ---------------------------------------------------------------------------
 
+
 def test_certification_entry_with_date():
     cert = CertificationEntry(name="AWS SAA", issuer="Amazon", date="Jun 2023")
     assert cert.date == "Jun 2023"
@@ -123,6 +123,7 @@ def test_certification_entry_optional_date():
 # ---------------------------------------------------------------------------
 # ProjectEntry
 # ---------------------------------------------------------------------------
+
 
 def test_project_entry_valid():
     proj = ProjectEntry(
@@ -148,6 +149,7 @@ def test_project_entry_empty_bullets_rejected():
 # ---------------------------------------------------------------------------
 # ResumeBodyJSON optional sections and skipped_sections
 # ---------------------------------------------------------------------------
+
 
 def test_skipped_sections_defaults_to_empty_list():
     resume = ResumeBodyJSON(**_valid_resume())
@@ -181,6 +183,7 @@ def test_experience_location_optional():
 # ---------------------------------------------------------------------------
 # ReviewJSON
 # ---------------------------------------------------------------------------
+
 
 def _valid_review() -> dict:
     return {
@@ -222,6 +225,7 @@ def test_review_score_boundary_values():
 # ContactFields
 # ---------------------------------------------------------------------------
 
+
 def test_contact_required_fields():
     contact = ContactFields(name="Jane Smith", email="jane@example.com")
     assert contact.name == "Jane Smith"
@@ -262,6 +266,7 @@ def test_contact_missing_email_rejected():
 # ---------------------------------------------------------------------------
 # Tool definitions
 # ---------------------------------------------------------------------------
+
 
 def test_tailoring_tool_structure():
     assert TAILORING_TOOL["name"] == "submit_resume"
