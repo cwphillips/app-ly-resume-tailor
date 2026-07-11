@@ -19,7 +19,17 @@ from config import (
 )
 from diff_view import diff_to_html
 from input_normalization import normalize_resume_text
-from models.schemas import ContactFields, ResumeBodyJSON, ReviewJSON
+from models.schemas import (
+    CertificationEntry,
+    ContactFields,
+    EducationEntry,
+    ExperienceEntry,
+    ProjectEntry,
+    ResumeBodyJSON,
+    ReviewJSON,
+    SkillGroup,
+)
+from resume_sections import resume_to_markdown, walk_sections
 from templates.library import DEFAULT_TEMPLATE, TEMPLATES, Template
 
 # Load environment variables (e.g. ANTHROPIC_API_KEY) before any runtime use.
@@ -114,55 +124,52 @@ def _estimate_cost(input_tokens: int, output_tokens: int) -> str:
     return f"~${cost:.3f}"
 
 
-def _resume_to_markdown(resume: ResumeBodyJSON, template: Template) -> str:
-    """Return a plain-text markdown representation of the resume for diffing."""
-    from templates.library import Section
+class _PreviewVisitor:
+    """Render each resume section into the Streamlit preview pane.
 
-    lines: list[str] = []
-    for section in template.sections:
-        if section == Section.SUMMARY and resume.summary:
-            lines += ["**Summary**", resume.summary, ""]
-        elif section == Section.EXPERIENCE:
-            lines.append("**Experience**")
-            for exp in resume.experience:
-                lines.append(
-                    f"**{exp.title}** — {exp.company}"
-                    + (f" | {exp.location}" if exp.location else "")
-                    + f" | {exp.start_date} – {exp.end_date}"
-                )
-                lines += [f"- {b}" for b in exp.bullets]
-                lines.append("")
-        elif section == Section.SKILLS:
-            groups = resume.skills
-            if template.max_skill_groups is not None:
-                groups = groups[: template.max_skill_groups]
-            lines.append("**Skills**")
-            lines += [f"{g.category}: {', '.join(g.skills)}" for g in groups]
-            lines.append("")
-        elif section == Section.EDUCATION:
-            lines.append("**Education**")
-            lines += [
-                f"**{edu.degree}** — {edu.institution} | {edu.graduation_date}"
-                for edu in resume.education
-            ]
-            lines.append("")
-        elif section == Section.CERTIFICATIONS and resume.certifications:
-            lines.append("**Certifications**")
-            for cert in resume.certifications:
-                line = f"**{cert.name}** — {cert.issuer}"
-                if cert.date:
-                    line += f" | {cert.date}"
-                lines.append(line)
-            lines.append("")
-        elif section == Section.PROJECTS and resume.projects:
-            lines.append("**Projects**")
-            for proj in resume.projects:
-                lines += [
-                    f"**{proj.name}**: {proj.description}",
-                    f"Technologies: {', '.join(proj.technologies)}",
-                ] + [f"- {b}" for b in proj.bullets]
-                lines.append("")
-    return "\n".join(lines)
+    Ordering, capping, and optional-section skipping are handled by
+    ``walk_sections``; this visitor only lays out a section it is handed.
+    """
+
+    def summary(self, text: str) -> None:
+        st.markdown(f"**Summary**\n\n{text}")
+
+    def experience(self, entries: list[ExperienceEntry]) -> None:
+        st.markdown("**Experience**")
+        for exp in entries:
+            st.markdown(
+                f"**{exp.title}** — {exp.company}"
+                + (f" | {exp.location}" if exp.location else "")
+                + f"\n\n_{exp.start_date} – {exp.end_date}_"
+            )
+            for bullet in exp.bullets:
+                st.markdown(f"- {bullet}")
+
+    def skills(self, groups: list[SkillGroup]) -> None:
+        skills_line = " | ".join(f"{g.category}: {', '.join(g.skills)}" for g in groups)
+        st.markdown(f"**Skills**\n\n{skills_line}")
+
+    def education(self, entries: list[EducationEntry]) -> None:
+        st.markdown("**Education**")
+        for edu in entries:
+            st.markdown(f"**{edu.degree}** — {edu.institution} | {edu.graduation_date}")
+
+    def certifications(self, entries: list[CertificationEntry]) -> None:
+        st.markdown("**Certifications**")
+        for cert in entries:
+            line = f"**{cert.name}** — {cert.issuer}"
+            if cert.date:
+                line += f" | {cert.date}"
+            st.markdown(line)
+
+    def projects(self, entries: list[ProjectEntry]) -> None:
+        st.markdown("**Projects**")
+        for proj in entries:
+            st.markdown(f"**{proj.name}**")
+            st.markdown(proj.description)
+            st.caption(f"Technologies: {', '.join(proj.technologies)}")
+            for bullet in proj.bullets:
+                st.markdown(f"- {bullet}")
 
 
 class _StreamlitProgress(pipeline.ProgressReporter):
@@ -192,58 +199,8 @@ class _StreamlitProgress(pipeline.ProgressReporter):
 
 
 def _render_resume_preview(resume: ResumeBodyJSON, template: Template) -> None:
-    from templates.library import Section
-
     st.subheader("Resume Preview")
-
-    for section in template.sections:
-        if section == Section.SUMMARY and resume.summary:
-            st.markdown(f"**Summary**\n\n{resume.summary}")
-
-        elif section == Section.EXPERIENCE:
-            st.markdown("**Experience**")
-            for exp in resume.experience:
-                st.markdown(
-                    f"**{exp.title}** — {exp.company}"
-                    + (f" | {exp.location}" if exp.location else "")
-                    + f"\n\n_{exp.start_date} – {exp.end_date}_"
-                )
-                for bullet in exp.bullets:
-                    st.markdown(f"- {bullet}")
-
-        elif section == Section.SKILLS:
-            groups = resume.skills
-            if template.max_skill_groups is not None:
-                groups = groups[: template.max_skill_groups]
-            skills_line = " | ".join(
-                f"{g.category}: {', '.join(g.skills)}" for g in groups
-            )
-            st.markdown(f"**Skills**\n\n{skills_line}")
-
-        elif section == Section.EDUCATION:
-            st.markdown("**Education**")
-            for edu in resume.education:
-                st.markdown(
-                    f"**{edu.degree}** — {edu.institution} | {edu.graduation_date}"
-                )
-
-        elif section == Section.CERTIFICATIONS and resume.certifications:
-            st.markdown("**Certifications**")
-            for cert in resume.certifications:
-                line = f"**{cert.name}** — {cert.issuer}"
-                if cert.date:
-                    line += f" | {cert.date}"
-                st.markdown(line)
-
-        elif section == Section.PROJECTS and resume.projects:
-            st.markdown("**Projects**")
-            for proj in resume.projects:
-                st.markdown(f"**{proj.name}**")
-                st.markdown(proj.description)
-                st.caption(f"Technologies: {', '.join(proj.technologies)}")
-                for bullet in proj.bullets:
-                    st.markdown(f"- {bullet}")
-
+    walk_sections(resume, template, _PreviewVisitor())
     with st.expander("Why this resume? (tailoring rationale)"):
         st.write(resume.rationale)
 
@@ -544,7 +501,7 @@ if (
         st.session_state.running = True
         prev_score = st.session_state.review.score if st.session_state.review else None
         current_template = TEMPLATES[st.session_state.selected_template_id]
-        st.session_state.previous_resume_md = _resume_to_markdown(
+        st.session_state.previous_resume_md = resume_to_markdown(
             st.session_state.resume_body, current_template
         )
 
@@ -646,7 +603,7 @@ if st.session_state.resume_body is not None:
         st.session_state.previous_resume_md is not None
         and st.session_state.resume_body is not None
     ):
-        new_md = _resume_to_markdown(st.session_state.resume_body, selected_template)
+        new_md = resume_to_markdown(st.session_state.resume_body, selected_template)
         diff_lines = list(
             difflib.unified_diff(
                 st.session_state.previous_resume_md.splitlines(),
