@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import anthropic
+from pydantic import ValidationError
 
+from agents.errors import MalformedModelOutputError
 from models.schemas import REVIEW_TOOL, ResumeBodyJSON, ReviewJSON
 
 
@@ -15,6 +17,19 @@ class ReviewResult:
 
 
 MODEL = "claude-sonnet-4-6"
+
+
+def _parse_review(tool_input: dict) -> ReviewJSON:
+    """Parse the tool payload into a ReviewJSON, mapping schema failures to a
+    clear, typed error."""
+    try:
+        return ReviewJSON(**tool_input)
+    except ValidationError as err:
+        raise MalformedModelOutputError(
+            "The model returned review data that didn't match the expected "
+            "format. This happens occasionally — please try again."
+        ) from err
+
 
 SYSTEM_PROMPT = """\
 You are a dual-mode resume evaluator. You will assess the provided resume body against the
@@ -88,7 +103,7 @@ def run(
             "This is unexpected — try again or check your API key and quota."
         )
     return ReviewResult(
-        review=ReviewJSON(**tool_use_block.input),
+        review=_parse_review(tool_use_block.input),
         input_tokens=response.usage.input_tokens,
         output_tokens=response.usage.output_tokens,
     )

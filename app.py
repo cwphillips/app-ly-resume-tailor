@@ -12,6 +12,7 @@ import agents.review as review_agent
 import agents.tailoring as tailoring_agent
 import exporters.converter as converter
 import exporters.docx as docx_exporter
+from agents.errors import MalformedModelOutputError
 from agents.review import ReviewResult
 from agents.tailoring import TailoringResult
 from diff_view import diff_to_html
@@ -551,6 +552,8 @@ if st.button(
         st.error("Rate limit reached. Wait a moment and try again.")
     except anthropic.APIError as e:
         st.error(f"Anthropic API error: {e}")
+    except MalformedModelOutputError as e:
+        st.error(str(e))
     except Exception as e:
         st.error(f"Unexpected error: {e}")
     finally:
@@ -616,6 +619,8 @@ if (
             st.error("Rate limit reached. Wait a moment and try again.")
         except anthropic.APIError as e:
             st.error(f"Anthropic API error: {e}")
+        except MalformedModelOutputError as e:
+            st.error(str(e))
         except Exception as e:
             st.error(f"Unexpected error: {e}")
         finally:
