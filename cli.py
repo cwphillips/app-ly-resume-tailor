@@ -25,6 +25,7 @@ import exporters.docx as docx_exporter
 import pipeline
 from agents.errors import MalformedModelOutputError
 from input_normalization import normalize_resume_text
+from logging_config import configure_logging
 from models.schemas import ContactFields
 from templates.library import DEFAULT_TEMPLATE, TEMPLATES
 
@@ -104,6 +105,8 @@ def _print_review(review, output_path: Path) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    configure_logging()
 
     api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not api_key:

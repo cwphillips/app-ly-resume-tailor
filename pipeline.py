@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 import agents.review as review_agent
@@ -8,6 +9,9 @@ from agents.review import ReviewResult
 from agents.tailoring import TailoringResult
 from config import MODEL_ID
 from models.schemas import ResumeBodyJSON, ReviewJSON
+
+# Logs counts and control flow only — never resume, job-listing, or contact text.
+logger = logging.getLogger("app_ly.pipeline")
 
 
 class ProgressReporter:
@@ -64,44 +68,74 @@ def run_pipeline(
     """
     reporter = progress or ProgressReporter()
 
-    label = "Refinement pass" if previous_resume is not None else "Tailoring resume"
-    reporter.message(f"**Step 1 of 2 — {label}** (model: `{MODEL_ID}`)")
+    mode = "refine" if previous_resume is not None else "generate"
+    logger.info("pipeline start: mode=%s model=%s", mode, MODEL_ID)
 
-    tailor_result: TailoringResult = tailoring_agent.run(
-        resume_text=resume_text,
-        job_listing=job_listing,
-        target_role=target_role,
-        page_limit=page_limit,
-        allow_reword=allow_reword,
-        include_summary=include_summary,
-        max_skill_groups=max_skill_groups,
-        previous_resume=previous_resume,
-        review_feedback=review_feedback,
-        progress_callback=reporter.token_progress,
-        api_key=api_key,
-    )
-    reporter.token_progress_done()
-    reporter.message(
-        f"  Done — {tailor_result.input_tokens:,} in, "
-        f"{tailor_result.output_tokens:,} out."
-    )
+    try:
+        label = "Refinement pass" if previous_resume is not None else "Tailoring resume"
+        reporter.message(f"**Step 1 of 2 — {label}** (model: `{MODEL_ID}`)")
 
-    reporter.message(f"**Step 2 of 2 — Reviewing resume** (model: `{MODEL_ID}`)")
-    review_result: ReviewResult = review_agent.run(
-        resume=tailor_result.resume,
-        job_listing=job_listing,
-        target_role=target_role,
-        page_limit=page_limit,
-        api_key=api_key,
-    )
-    reporter.message(
-        f"  Done — {review_result.input_tokens:,} in, "
-        f"{review_result.output_tokens:,} out."
-    )
+        tailor_result: TailoringResult = tailoring_agent.run(
+            resume_text=resume_text,
+            job_listing=job_listing,
+            target_role=target_role,
+            page_limit=page_limit,
+            allow_reword=allow_reword,
+            include_summary=include_summary,
+            max_skill_groups=max_skill_groups,
+            previous_resume=previous_resume,
+            review_feedback=review_feedback,
+            progress_callback=reporter.token_progress,
+            api_key=api_key,
+        )
+        reporter.token_progress_done()
+        logger.info(
+            "tailor call complete: model=%s input_tokens=%d output_tokens=%d",
+            MODEL_ID,
+            tailor_result.input_tokens,
+            tailor_result.output_tokens,
+        )
+        reporter.message(
+            f"  Done — {tailor_result.input_tokens:,} in, "
+            f"{tailor_result.output_tokens:,} out."
+        )
 
+        reporter.message(f"**Step 2 of 2 — Reviewing resume** (model: `{MODEL_ID}`)")
+        review_result: ReviewResult = review_agent.run(
+            resume=tailor_result.resume,
+            job_listing=job_listing,
+            target_role=target_role,
+            page_limit=page_limit,
+            api_key=api_key,
+        )
+        logger.info(
+            "review call complete: model=%s input_tokens=%d output_tokens=%d score=%d",
+            MODEL_ID,
+            review_result.input_tokens,
+            review_result.output_tokens,
+            review_result.review.score,
+        )
+        reporter.message(
+            f"  Done — {review_result.input_tokens:,} in, "
+            f"{review_result.output_tokens:,} out."
+        )
+    except Exception:
+        # Log the failure with a traceback for the self-hoster; the caller still
+        # handles it and shows a friendly message. No PII is in the log record.
+        logger.exception("pipeline failed: mode=%s model=%s", mode, MODEL_ID)
+        raise
+
+    total_input = tailor_result.input_tokens + review_result.input_tokens
+    total_output = tailor_result.output_tokens + review_result.output_tokens
+    logger.info(
+        "pipeline complete: mode=%s total_input_tokens=%d total_output_tokens=%d",
+        mode,
+        total_input,
+        total_output,
+    )
     return PipelineResult(
         resume=tailor_result.resume,
         review=review_result.review,
-        input_tokens=tailor_result.input_tokens + review_result.input_tokens,
-        output_tokens=tailor_result.output_tokens + review_result.output_tokens,
+        input_tokens=total_input,
+        output_tokens=total_output,
     )

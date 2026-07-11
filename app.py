@@ -21,6 +21,7 @@ from config import (
 )
 from diff_view import diff_to_html
 from input_normalization import normalize_resume_text
+from logging_config import configure_logging
 from models.schemas import (
     CertificationEntry,
     ContactFields,
@@ -36,6 +37,9 @@ from templates.library import DEFAULT_TEMPLATE, TEMPLATES, Template
 
 # Load environment variables (e.g. ANTHROPIC_API_KEY) before any runtime use.
 load_dotenv()
+
+# Configure logging (honours LOG_LEVEL); idempotent across Streamlit reruns.
+configure_logging()
 
 # ---------------------------------------------------------------------------
 # Page config
