@@ -148,6 +148,16 @@ Restart the app after installing. PDF and ODT download buttons will appear autom
 uv run pytest
 ```
 
+## Logging
+
+Both the app and the CLI emit lightweight logs (model + token usage per run, and failures) via the stdlib `logging` module. Set the level with the `LOG_LEVEL` environment variable (default `INFO`):
+
+```bash
+LOG_LEVEL=DEBUG uv run streamlit run app.py
+```
+
+Resume content, job listings, and contact details are **never** logged — only token counts and control-flow context.
+
 ## Privacy
 
 - Resume content and the job listing are sent to Anthropic's API for tailoring and review.
