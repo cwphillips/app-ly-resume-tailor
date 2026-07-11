@@ -4,7 +4,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 import anthropic
+from pydantic import ValidationError
 
+from agents.errors import MalformedModelOutputError
 from models.schemas import TAILORING_TOOL, ResumeBodyJSON, ReviewJSON
 
 
@@ -16,6 +18,19 @@ class TailoringResult:
 
 
 MODEL = "claude-sonnet-4-6"
+
+
+def _parse_resume(tool_input: dict) -> ResumeBodyJSON:
+    """Parse the tool payload into a ResumeBodyJSON, mapping schema failures
+    to a clear, typed error."""
+    try:
+        return ResumeBodyJSON(**tool_input)
+    except ValidationError as err:
+        raise MalformedModelOutputError(
+            "The model returned resume data that didn't match the expected "
+            "format. This happens occasionally — please try again."
+        ) from err
+
 
 SYSTEM_PROMPT = """\
 You are an expert resume writer.
@@ -162,7 +177,7 @@ def run(
             "This is unexpected — try again or check your API key and quota."
         )
     return TailoringResult(
-        resume=ResumeBodyJSON(**tool_use_block.input),
+        resume=_parse_resume(tool_use_block.input),
         input_tokens=response.usage.input_tokens,
         output_tokens=response.usage.output_tokens,
     )
